@@ -6,16 +6,103 @@
 #include "ConnectionGraphicsObject.hpp"
 #include "ConnectionIdUtils.hpp"
 #include "DataFlowGraphModel.hpp"
+#include "GraphicsView.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
 #include "NodeState.hpp"
 #include "StyleCollection.hpp"
 
 #include <QtCore/QMargins>
+#include <QtGui/QPainterPath>
 
 #include <cmath>
 
 namespace QtNodes {
+
+namespace {
+
+GraphicsView *graphics_view(NodeGraphicsObject &ngo)
+{
+    if (!ngo.scene()) {
+        return nullptr;
+    }
+
+    QList<QGraphicsView *> const views = ngo.scene()->views();
+    for (QGraphicsView *view : views) {
+        if (auto *graphicsView = qobject_cast<GraphicsView *>(view)) {
+            return graphicsView;
+        }
+    }
+
+    return nullptr;
+}
+
+bool is_zoom_animating(NodeGraphicsObject &ngo)
+{
+    if (auto *view = graphics_view(ngo)) {
+        return view->isZoomAnimating();
+    }
+    return false;
+}
+
+bool should_draw_text_as_path(NodeGraphicsObject &ngo)
+{
+    auto *view = graphics_view(ngo);
+    if (!view) {
+        return false;
+    }
+
+    switch (view->textRenderingPolicy()) {
+    case GraphicsView::TextRenderingPolicy::QtText:
+        return false;
+    case GraphicsView::TextRenderingPolicy::PathWhenZooming:
+        return view->isZoomAnimating();
+    case GraphicsView::TextRenderingPolicy::PathAlways:
+        return true;
+    }
+
+    return false;
+}
+
+void configure_text_painter(QPainter *painter, NodeGraphicsObject &ngo)
+{
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
+
+    if (should_draw_text_as_path(ngo)) {
+        return;
+    }
+
+    if (!is_zoom_animating(ngo)) {
+        return;
+    }
+
+    QFont font = painter->font();
+    font.setHintingPreference(QFont::PreferNoHinting);
+    painter->setFont(font);
+}
+
+void draw_text(
+    QPainter *painter,
+    NodeGraphicsObject &ngo,
+    QPointF const &position,
+    QString const &text,
+    QColor const &color,
+    QFont const &font)
+{
+    if (should_draw_text_as_path(ngo)) {
+        QPainterPath path;
+        path.addText(position, font, text);
+        painter->setPen(Qt::NoPen);
+        painter->fillPath(path, color);
+        return;
+    }
+
+    painter->setFont(font);
+    painter->setPen(color);
+    painter->drawText(position, text);
+}
+
+} // namespace
 
 void DefaultNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo) const
 {
@@ -230,15 +317,20 @@ void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &
 
     QFont f = painter->font();
     f.setBold(true);
+    if (!should_draw_text_as_path(ngo) && is_zoom_animating(ngo)) {
+        f.setHintingPreference(QFont::PreferNoHinting);
+    }
+    else {
+        f.setHintingPreference(QFont::PreferDefaultHinting);
+    }
 
     QPointF position = geometry.captionPosition(nodeId);
 
     QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
     NodeStyle nodeStyle(json.object());
 
-    painter->setFont(f);
-    painter->setPen(nodeStyle.FontColor);
-    painter->drawText(position, name);
+    painter->setRenderHint(QPainter::TextAntialiasing, true);
+    draw_text(painter, ngo, position, name, nodeStyle.FontColor, f);
 
     f.setBold(false);
     painter->setFont(f);
@@ -246,6 +338,8 @@ void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &
 
 void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &ngo) const
 {
+    configure_text_painter(painter, ngo);
+
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
@@ -279,7 +373,9 @@ void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &
                 s = portData.value<NodeDataType>().name;
             }
 
-            painter->drawText(p, s);
+            QColor const textColor = connected.empty() ? nodeStyle.FontColorFaded
+                                                       : nodeStyle.FontColor;
+            draw_text(painter, ngo, p, s, textColor, painter->font());
         }
     }
 }
@@ -339,8 +435,8 @@ void DefaultNodePainter::drawProcessingIndicator(QPainter *painter, NodeGraphics
         x = size.width() - iconSize - margin;
     }
 
-    QRect r(x, size.height() - iconSize - margin, iconSize, iconSize);
-    painter->drawPixmap(r, pixmap);
+    QRectF const targetRect(x, size.height() - iconSize - margin, iconSize, iconSize);
+    painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
 }
 
 void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObject &ngo) const
@@ -377,8 +473,11 @@ void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObjec
     QPointF center(size.width(), 0.0);
     center += QPointF(iconSize.width() / 2.0, -iconSize.height() / 2.0);
 
-    painter->drawPixmap(center.toPoint() - QPoint(iconSize.width() / 2, iconSize.height() / 2),
-                        pixmap);
+    QRectF const targetRect(center.x() - iconSize.width() / 2.0,
+                            center.y() - iconSize.height() / 2.0,
+                            iconSize.width(),
+                            iconSize.height());
+    painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
 }
 
 } // namespace QtNodes

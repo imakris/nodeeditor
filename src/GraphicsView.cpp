@@ -36,6 +36,30 @@ constexpr double zoom_max_velocity = 5.0;
 constexpr double zoom_per_notch = 1.05;
 constexpr int zoom_timer_interval_ms = 16;
 constexpr double zoom_velocity_epsilon = 0.001;
+
+QPointF map_to_scene_exact(QGraphicsView const &view, QPointF const &viewPoint)
+{
+    bool invertible = false;
+    QTransform const invertedTransform = view.viewportTransform().inverted(&invertible);
+    if (!invertible) {
+        return view.mapToScene(viewPoint.toPoint());
+    }
+
+    return invertedTransform.map(viewPoint);
+}
+
+void set_node_cache_mode(QGraphicsScene *scene, QGraphicsItem::CacheMode mode)
+{
+    if (!scene) {
+        return;
+    }
+
+    for (QGraphicsItem *item : scene->items()) {
+        if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject *>(item)) {
+            item->setCacheMode(mode);
+        }
+    }
+}
 } // namespace
 
 using QtNodes::BasicGraphicsScene;
@@ -74,6 +98,8 @@ GraphicsView::GraphicsView(QWidget *parent)
     // re-calculation when expanding the all QGraphicsItems common rect.
     int maxSize = 32767;
     setSceneRect(-maxSize, -maxSize, (maxSize * 2), (maxSize * 2));
+
+    apply_rasterization_policy();
 }
 
 GraphicsView::GraphicsView(BasicGraphicsScene *scene, QWidget *parent)
@@ -109,6 +135,8 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
         _pasteAction = nullptr;
         return;
     }
+
+    apply_rasterization_policy();
 
     {
         // setup actions
@@ -263,16 +291,13 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
                                -zoom_max_velocity, zoom_max_velocity);
     _zoomPivot = event->position();
 
-    if (_zoomTimerId == 0) {
-        if (scene()) {
-            for (QGraphicsItem *item : scene()->items()) {
-                if (qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-                    item->setCacheMode(QGraphicsItem::NoCache);
-                }
-            }
-        }
+    applyZoomStep();
+
+    if (_zoomTimerId == 0 && std::abs(_zoomVelocity) >= zoom_velocity_epsilon) {
         _zoomTimerId = startTimer(zoom_timer_interval_ms);
     }
+
+    event->accept();
 }
 
 void GraphicsView::timerEvent(QTimerEvent *event)
@@ -314,31 +339,29 @@ void GraphicsView::applyZoomStep()
 
 void GraphicsView::applyZoomFactor(double factor)
 {
-    QPointF const scenePivot = mapToScene(_zoomPivot.toPoint());
+    QPointF const scenePivot = map_to_scene_exact(*this, _zoomPivot);
     double const newScale = transform().m11() * factor;
-
-    // Compute total offset needed so scenePivot appears at _zoomPivot.
-    // Mapping: widgetPos = transform * scenePos - scrollOffset
-    // We need: _zoomPivot = newScale * scenePivot + (tx,ty) - (hbar,vbar)
-    // Split into integer scrollbar values and sub-pixel transform translation
-    // to avoid the whole-pixel jumps that integer scrollbars cause.
-    QPointF const fullOffset(newScale * scenePivot.x() - _zoomPivot.x(),
-                             newScale * scenePivot.y() - _zoomPivot.y());
-
-    int const hval = qRound(fullOffset.x());
-    int const vval = qRound(fullOffset.y());
-    double const tx = hval - fullOffset.x();
-    double const ty = vval - fullOffset.y();
-
-    QTransform t;
-    t.translate(tx, ty);
-    t.scale(newScale, newScale);
 
     auto const savedAnchor = transformationAnchor();
     setTransformationAnchor(QGraphicsView::NoAnchor);
-    setTransform(t, false);
-    horizontalScrollBar()->setValue(hval);
-    verticalScrollBar()->setValue(vval);
+
+    QTransform scaledTransform;
+    scaledTransform.scale(newScale, newScale);
+    setTransform(scaledTransform, false);
+
+    QPointF const pivotAfterScale = viewportTransform().map(scenePivot);
+    QPointF const shift = pivotAfterScale - _zoomPivot;
+    horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(shift.x()));
+    verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(shift.y()));
+
+    QPointF const pivotAfterScroll = viewportTransform().map(scenePivot);
+    QPointF const residual = _zoomPivot - pivotAfterScroll;
+
+    QTransform preciseTransform;
+    preciseTransform.translate(residual.x(), residual.y());
+    preciseTransform.scale(newScale, newScale);
+    setTransform(preciseTransform, false);
+
     setTransformationAnchor(savedAnchor);
 
     Q_EMIT scaleChanged(newScale);
@@ -346,31 +369,72 @@ void GraphicsView::applyZoomFactor(double factor)
 
 void GraphicsView::stopZoomTimer()
 {
+    bool const hadFractionalOffset = std::abs(transform().dx()) > 1e-6 || std::abs(transform().dy()) > 1e-6;
+
     if (_zoomTimerId != 0) {
         killTimer(_zoomTimerId);
         _zoomTimerId = 0;
+    }
 
-        // Remove sub-pixel translation from transform so normal interaction
-        // (hit testing, panning) uses a clean scale-only transform.
+    if (hadFractionalOffset && _rasterizationPolicy == RasterizationPolicy::Crisp) {
+        QPointF const viewOrigin(0.0, 0.0);
+        QPointF const sceneAtOrigin = map_to_scene_exact(*this, viewOrigin);
         double const s = transform().m11();
         QTransform clean;
         clean.scale(s, s);
         setTransform(clean, false);
 
-        if (scene()) {
-            for (QGraphicsItem *item : scene()->items()) {
-                if (qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-                    item->setCacheMode(QGraphicsItem::DeviceCoordinateCache);
-                }
-            }
-        }
+        QPointF const originAfterCleanup = viewportTransform().map(sceneAtOrigin);
+        horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(originAfterCleanup.x()));
+        verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(originAfterCleanup.y()));
     }
+
     _zoomVelocity = 0.0;
 }
 
 double GraphicsView::getScale() const
 {
     return transform().m11();
+}
+
+bool GraphicsView::isZoomAnimating() const
+{
+    return _zoomTimerId != 0;
+}
+
+GraphicsView::TextRenderingPolicy GraphicsView::textRenderingPolicy() const
+{
+    return _textRenderingPolicy;
+}
+
+void GraphicsView::setTextRenderingPolicy(TextRenderingPolicy policy)
+{
+    if (_textRenderingPolicy == policy) {
+        return;
+    }
+
+    _textRenderingPolicy = policy;
+    viewport()->update();
+}
+
+GraphicsView::RasterizationPolicy GraphicsView::rasterizationPolicy() const
+{
+    return _rasterizationPolicy;
+}
+
+void GraphicsView::setRasterizationPolicy(RasterizationPolicy policy)
+{
+    if (_rasterizationPolicy == policy) {
+        return;
+    }
+
+    _rasterizationPolicy = policy;
+    apply_rasterization_policy();
+}
+
+void GraphicsView::stopZoomAnimation()
+{
+    stopZoomTimer();
 }
 
 void GraphicsView::setScaleRange(double minimum, double maximum)
@@ -392,6 +456,8 @@ void GraphicsView::setScaleRange(ScaleRange range)
 
 void GraphicsView::scaleUp()
 {
+    stopZoomTimer();
+
     double const step = 1.2;
     double const factor = std::pow(step, 1.0);
 
@@ -410,6 +476,8 @@ void GraphicsView::scaleUp()
 
 void GraphicsView::scaleDown()
 {
+    stopZoomTimer();
+
     double const step = 1.2;
     double const factor = std::pow(step, -1.0);
 
@@ -428,6 +496,8 @@ void GraphicsView::scaleDown()
 
 void GraphicsView::setupScale(double scale)
 {
+    stopZoomTimer();
+
     scale = std::max(_scaleRange.minimum, std::min(_scaleRange.maximum, scale));
 
     if (scale <= 0)
@@ -508,6 +578,10 @@ void GraphicsView::keyReleaseEvent(QKeyEvent *event)
 
 void GraphicsView::mousePressEvent(QMouseEvent *event)
 {
+    if (event->button() != Qt::NoButton) {
+        stopZoomTimer();
+    }
+
     QGraphicsView::mousePressEvent(event);
     if (event->button() == Qt::LeftButton) {
         _clickPos = mapToScene(event->pos());
@@ -538,15 +612,18 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
 
     qreal x_offset = 0.0;
     qreal y_offset = 0.0;
+    bool const crisp_grid = (_rasterizationPolicy == RasterizationPolicy::Crisp);
 
-    QTransform const view_transform = transform();
-    qreal const scale_x = std::abs(view_transform.m11());
-    qreal const scale_y = std::abs(view_transform.m22());
-    if (scale_x > 0.0) {
-        x_offset = 0.5 / scale_x;
-    }
-    if (scale_y > 0.0) {
-        y_offset = 0.5 / scale_y;
+    if (crisp_grid) {
+        QTransform const view_transform = transform();
+        qreal const scale_x = std::abs(view_transform.m11());
+        qreal const scale_y = std::abs(view_transform.m22());
+        if (scale_x > 0.0) {
+            x_offset = 0.5 / scale_x;
+        }
+        if (scale_y > 0.0) {
+            y_offset = 0.5 / scale_y;
+        }
     }
 
     auto drawGrid = [&](double gridStep) {
@@ -578,13 +655,13 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
     auto const &flowViewStyle = StyleCollection::flowViewStyle();
 
     QPen pfine(flowViewStyle.FineGridColor, 1.0);
-    pfine.setCosmetic(true);
+    pfine.setCosmetic(crisp_grid);
 
     painter->setPen(pfine);
     drawGrid(15);
 
     QPen p(flowViewStyle.CoarseGridColor, 1.0);
-    p.setCosmetic(true);
+    p.setCosmetic(crisp_grid);
 
     painter->setPen(p);
     drawGrid(150);
@@ -615,11 +692,15 @@ QPointF GraphicsView::scenePastePosition()
 
 void GraphicsView::zoomFitAll()
 {
+    stopZoomTimer();
+
     fitInView(scene()->itemsBoundingRect(), Qt::KeepAspectRatio);
 }
 
 void GraphicsView::zoomFitSelected()
 {
+    stopZoomTimer();
+
     if (scene()->selectedItems().count() > 0) {
         QRectF unitedBoundingRect{};
 
@@ -630,4 +711,34 @@ void GraphicsView::zoomFitSelected()
 
         fitInView(unitedBoundingRect, Qt::KeepAspectRatio);
     }
+}
+
+void GraphicsView::apply_rasterization_policy()
+{
+    if (_rasterizationPolicy == RasterizationPolicy::Consistent) {
+        setCacheMode(QGraphicsView::CacheNone);
+        set_node_cache_mode(scene(), QGraphicsItem::NoCache);
+    }
+    else {
+        if (std::abs(transform().dx()) > 1e-6 || std::abs(transform().dy()) > 1e-6) {
+            QPointF const viewOrigin(0.0, 0.0);
+            QPointF const sceneAtOrigin = map_to_scene_exact(*this, viewOrigin);
+            double const s = transform().m11();
+            QTransform clean;
+            clean.scale(s, s);
+            setTransform(clean, false);
+
+            QPointF const originAfterCleanup = viewportTransform().map(sceneAtOrigin);
+            horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(originAfterCleanup.x()));
+            verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(originAfterCleanup.y()));
+        }
+
+        setCacheMode(QGraphicsView::CacheBackground);
+        set_node_cache_mode(scene(), QGraphicsItem::DeviceCoordinateCache);
+    }
+
+    if (scene()) {
+        scene()->update();
+    }
+    viewport()->update();
 }

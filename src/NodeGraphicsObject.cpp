@@ -5,6 +5,7 @@
 #include "BasicGraphicsScene.hpp"
 #include "ConnectionGraphicsObject.hpp"
 #include "ConnectionIdUtils.hpp"
+#include "GraphicsView.hpp"
 #include "NodeConnectionInteraction.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGroup.hpp"
@@ -18,6 +19,24 @@
 #include <cstdlib>
 
 namespace QtNodes {
+
+namespace {
+
+QGraphicsItem::CacheMode initial_cache_mode(BasicGraphicsScene &scene)
+{
+    QList<QGraphicsView *> const views = scene.views();
+    for (QGraphicsView *view : views) {
+        if (auto *graphicsView = qobject_cast<GraphicsView *>(view)) {
+            return graphicsView->rasterizationPolicy() == GraphicsView::RasterizationPolicy::Consistent
+                ? QGraphicsItem::NoCache
+                : QGraphicsItem::DeviceCoordinateCache;
+        }
+    }
+
+    return QGraphicsItem::DeviceCoordinateCache;
+}
+
+} // namespace
 
 NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
     : _nodeId(nodeId)
@@ -36,7 +55,7 @@ NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
 
     setLockedState();
 
-    setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+    setCacheMode(initial_cache_mode(scene));
 
     QJsonObject nodeStyleJson = _graphModel.nodeData(_nodeId, NodeRole::Style).toJsonObject();
 

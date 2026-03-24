@@ -171,9 +171,11 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
             QIcon icon(":convert.png");
 
             QPixmap pixmap = icon.pixmap(QSize(22, 22));
-            painter->drawPixmap(cubic.pointAtPercent(0.50)
-                                    - QPoint(pixmap.width() / 2, pixmap.height() / 2),
-                                pixmap);
+            QRectF const targetRect(cubic.pointAtPercent(0.50).x() - pixmap.width() / 2.0,
+                                    cubic.pointAtPercent(0.50).y() - pixmap.height() / 2.0,
+                                    pixmap.width(),
+                                    pixmap.height());
+            painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
         }
     } else {
         p.setColor(normalColorOut);

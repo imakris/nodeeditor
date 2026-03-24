@@ -21,6 +21,19 @@ public:
         double maximum = 0;
     };
 
+    enum class TextRenderingPolicy
+    {
+        QtText,
+        PathWhenZooming,
+        PathAlways,
+    };
+
+    enum class RasterizationPolicy
+    {
+        Crisp,
+        Consistent,
+    };
+
 public:
     GraphicsView(QWidget *parent = Q_NULLPTR);
     GraphicsView(BasicGraphicsScene *scene, QWidget *parent = Q_NULLPTR);
@@ -42,6 +55,18 @@ public:
     void setScaleRange(ScaleRange range);
 
     double getScale() const;
+
+    bool isZoomAnimating() const;
+
+    TextRenderingPolicy textRenderingPolicy() const;
+
+    void setTextRenderingPolicy(TextRenderingPolicy policy);
+
+    RasterizationPolicy rasterizationPolicy() const;
+
+    void setRasterizationPolicy(RasterizationPolicy policy);
+
+    void stopZoomAnimation();
 
 public Q_SLOTS:
     void scaleUp();
@@ -104,9 +129,12 @@ private:
     void applyZoomStep();
     void applyZoomFactor(double factor);
     void stopZoomTimer();
+    void apply_rasterization_policy();
 
     double _zoomVelocity = 0.0;
     QPointF _zoomPivot;
     int _zoomTimerId = 0;
+    TextRenderingPolicy _textRenderingPolicy = TextRenderingPolicy::PathAlways;
+    RasterizationPolicy _rasterizationPolicy = RasterizationPolicy::Consistent;
 };
 } // namespace QtNodes

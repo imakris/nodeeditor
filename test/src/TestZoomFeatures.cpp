@@ -9,6 +9,8 @@
 
 #include <QSignalSpy>
 #include <QTest>
+#include <QApplication>
+#include <QWheelEvent>
 
 using QtNodes::BasicGraphicsScene;
 using QtNodes::GraphicsView;
@@ -68,6 +70,50 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
 
         view.setupScale(10.0);
         CHECK(view.getScale() <= 4.0);
+    }
+
+    SECTION("Smooth wheel zoom keeps the cursor anchor stable")
+    {
+        view.setupScale(1.0);
+
+        QPointF const pivot(321.25, 247.75);
+        bool invertible = false;
+        QTransform const invertedTransform = view.viewportTransform().inverted(&invertible);
+        REQUIRE(invertible);
+
+        QPointF const trackedScenePoint = invertedTransform.map(pivot);
+
+        QWheelEvent wheelEvent(pivot,
+                               view.mapToGlobal(pivot.toPoint()),
+                               QPoint(0, 0),
+                               QPoint(0, 120),
+                               Qt::NoButton,
+                               Qt::NoModifier,
+                               Qt::ScrollPhase::NoScrollPhase,
+                               false);
+        QApplication::sendEvent(view.viewport(), &wheelEvent);
+        QTest::qWait(20);
+
+        QPointF const mappedPivot = view.viewportTransform().map(trackedScenePoint);
+        CHECK(mappedPivot.x() == Approx(pivot.x()).margin(1.0));
+        CHECK(mappedPivot.y() == Approx(pivot.y()).margin(1.0));
+    }
+
+    SECTION("Smooth wheel zoom settles back to a clean transform")
+    {
+        QWheelEvent wheelEvent(QPointF(320.0, 240.0),
+                               view.mapToGlobal(QPoint(320, 240)),
+                               QPoint(0, 0),
+                               QPoint(0, 120),
+                               Qt::NoButton,
+                               Qt::NoModifier,
+                               Qt::ScrollPhase::NoScrollPhase,
+                               false);
+        QApplication::sendEvent(view.viewport(), &wheelEvent);
+        QTest::qWait(500);
+
+        CHECK(view.transform().dx() == Approx(0.0).margin(0.01));
+        CHECK(view.transform().dy() == Approx(0.0).margin(0.01));
     }
 }
 
