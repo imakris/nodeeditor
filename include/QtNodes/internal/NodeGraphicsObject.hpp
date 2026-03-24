@@ -17,6 +17,7 @@ namespace QtNodes {
 
 class BasicGraphicsScene;
 class AbstractGraphModel;
+class GraphicsView;
 class NodeGroup;
 class NodeDelegateModel;
 class GroupGraphicsObject;
@@ -48,9 +49,13 @@ public:
 
     NodeState const &nodeState() const { return _nodeState; }
 
+    GraphicsView *currentGraphicsView() const { return _currentGraphicsView; }
+
     QRectF boundingRect() const override;
 
     void setGeometryChanged();
+
+    void updateValidationTooltip();
 
     /// Visits all attached connections and corrects
     /// their corresponding end points.
@@ -115,5 +120,6 @@ private:
     QGraphicsProxyWidget *_proxyWidget;
 
     std::weak_ptr<NodeGroup> _nodeGroup{};
+    GraphicsView *_currentGraphicsView = nullptr;
 };
 } // namespace QtNodes

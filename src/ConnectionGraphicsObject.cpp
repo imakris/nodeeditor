@@ -12,6 +12,8 @@
 #include "StyleCollection.hpp"
 #include "locateNode.hpp"
 
+#include <QtGui/QPainterPath>
+#include <QtGui/QPainterPathStroker>
 #include <QtWidgets/QGraphicsBlurEffect>
 #include <QtWidgets/QGraphicsDropShadowEffect>
 #include <QtWidgets/QGraphicsSceneMouseEvent>
@@ -96,40 +98,81 @@ ConnectionId const &ConnectionGraphicsObject::connectionId() const
     return _connectionId;
 }
 
-QRectF ConnectionGraphicsObject::boundingRect() const
+void ConnectionGraphicsObject::rebuildCachedGeometry() const
 {
-    auto points = pointsC1C2();
+    if (!_geometryDirty) {
+        return;
+    }
+    _geometryDirty = false;
 
-    // `normalized()` fixes inverted rects.
+    // Cubic path
+    auto const c1c2 = pointsC1C2();
+    _cachedCubicPath = QPainterPath(_out);
+    _cachedCubicPath.cubicTo(c1c2.first, c1c2.second, _in);
+
+    for (int i = 0; i < k_path_sample_count; ++i) {
+        double const ratio = double(i) / (k_path_sample_count - 1);
+        _cachedSamplePoints[i] = _cachedCubicPath.pointAtPercent(ratio);
+    }
+    _cachedMidPoint = _cachedSamplePoints[k_path_sample_count / 2];
+
+    // Bounding rect
     QRectF basicRect = QRectF(_out, _in).normalized();
-
-    QRectF c1c2Rect = QRectF(points.first, points.second).normalized();
-
+    QRectF c1c2Rect = QRectF(c1c2.first, c1c2.second).normalized();
     QRectF commonRect = basicRect.united(c1c2Rect);
 
     auto const &connectionStyle = StyleCollection::connectionStyle();
     float const diam = connectionStyle.pointDiameter();
     QPointF const cornerOffset(diam, diam);
-
-    // Expand rect by port circle diameter
     commonRect.setTopLeft(commonRect.topLeft() - cornerOffset);
     commonRect.setBottomRight(commonRect.bottomRight() + 2 * cornerOffset);
+    _cachedBoundingRect = commonRect;
 
-    return commonRect;
+    // Stroke path for hit testing
+    QPainterPath linearized(_out);
+    for (int i = 1; i < k_path_sample_count; ++i) {
+        linearized.lineTo(_cachedSamplePoints[i]);
+    }
+    QPainterPathStroker stroker;
+    stroker.setWidth(10.0);
+    _cachedStrokePath = stroker.createStroke(linearized);
+}
+
+QRectF ConnectionGraphicsObject::boundingRect() const
+{
+    rebuildCachedGeometry();
+    return _cachedBoundingRect;
 }
 
 QPainterPath ConnectionGraphicsObject::shape() const
 {
-#ifdef DEBUG_DRAWING
+    rebuildCachedGeometry();
+    return _cachedStrokePath;
+}
 
-    //QPainterPath path;
+QPainterPath const &ConnectionGraphicsObject::cachedCubicPath() const
+{
+    rebuildCachedGeometry();
+    return _cachedCubicPath;
+}
 
-    //path.addRect(boundingRect());
-    //return path;
+QPainterPath const &ConnectionGraphicsObject::cachedStrokePath() const
+{
+    rebuildCachedGeometry();
+    return _cachedStrokePath;
+}
 
-#else
-    return nodeScene()->connectionPainter().getPainterStroke(*this);
-#endif
+QPointF const &ConnectionGraphicsObject::cachedSamplePoint(int index) const
+{
+    rebuildCachedGeometry();
+    Q_ASSERT(index >= 0 && index < k_path_sample_count);
+    return _cachedSamplePoints[index];
+}
+
+QPointF const &ConnectionGraphicsObject::cachedMidPoint() const
+{
+    rebuildCachedGeometry();
+    return _cachedMidPoint;
 }
 
 QPointF const &ConnectionGraphicsObject::endPoint(PortType portType) const
@@ -145,11 +188,16 @@ void ConnectionGraphicsObject::setEndPoint(PortType portType, QPointF const &poi
         _in = point;
     else
         _out = point;
+
+    _geometryDirty = true;
 }
 
 void ConnectionGraphicsObject::move()
 {
-    auto moveEnd = [this](ConnectionId cId, PortType portType) {
+    QPointF newOut = _out;
+    QPointF newIn = _in;
+
+    auto moveEnd = [this](ConnectionId cId, PortType portType, QPointF &endPoint) {
         NodeId nodeId = getNodeId(portType, cId);
 
         if (nodeId == InvalidNodeId)
@@ -165,16 +213,21 @@ void ConnectionGraphicsObject::move()
                                                           getPortIndex(portType, cId),
                                                           ngo->sceneTransform());
 
-            QPointF connectionPos = sceneTransform().inverted().map(scenePos);
-
-            setEndPoint(portType, connectionPos);
+            endPoint = sceneTransform().inverted().map(scenePos);
         }
     };
 
-    moveEnd(_connectionId, PortType::Out);
-    moveEnd(_connectionId, PortType::In);
+    moveEnd(_connectionId, PortType::Out, newOut);
+    moveEnd(_connectionId, PortType::In, newIn);
+
+    if (newOut == _out && newIn == _in) {
+        return;
+    }
 
     prepareGeometryChange();
+    _out = newOut;
+    _in = newIn;
+    _geometryDirty = true;
 
     update();
 }

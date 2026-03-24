@@ -117,6 +117,75 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
     }
 }
 
+TEST_CASE("GraphicsView node cache policy", "[zoom]")
+{
+    auto app = applicationSetup();
+
+    auto model = std::make_shared<TestGraphModel>();
+    BasicGraphicsScene scene(*model);
+    GraphicsView view(&scene);
+
+    view.resize(800, 600);
+    view.show();
+    REQUIRE(QTest::qWaitForWindowExposed(&view));
+
+    NodeId const nodeId = model->addNode("Node1");
+    QCoreApplication::processEvents();
+
+    auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+    REQUIRE(nodeGraphics != nullptr);
+
+    SECTION("Rasterization policy toggles node cache mode")
+    {
+        view.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Crisp);
+        QCoreApplication::processEvents();
+        CHECK(nodeGraphics->cacheMode() == QGraphicsItem::DeviceCoordinateCache);
+
+        view.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Consistent);
+        QCoreApplication::processEvents();
+        CHECK(nodeGraphics->cacheMode() == QGraphicsItem::NoCache);
+    }
+
+    SECTION("Smooth zoom disables node cache while animating")
+    {
+        view.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Crisp);
+        QCoreApplication::processEvents();
+        REQUIRE(nodeGraphics->cacheMode() == QGraphicsItem::DeviceCoordinateCache);
+
+        QWheelEvent wheelEvent(QPointF(320.0, 240.0),
+                               view.mapToGlobal(QPoint(320, 240)),
+                               QPoint(0, 0),
+                               QPoint(0, 120),
+                               Qt::NoButton,
+                               Qt::NoModifier,
+                               Qt::ScrollPhase::NoScrollPhase,
+                               false);
+        QApplication::sendEvent(view.viewport(), &wheelEvent);
+        QCoreApplication::processEvents();
+
+        CHECK(view.isZoomAnimating());
+        CHECK(nodeGraphics->cacheMode() == QGraphicsItem::NoCache);
+
+        QTest::qWait(500);
+        CHECK_FALSE(view.isZoomAnimating());
+        CHECK(nodeGraphics->cacheMode() == QGraphicsItem::DeviceCoordinateCache);
+    }
+
+    SECTION("Shared scenes keep node cache disabled")
+    {
+        GraphicsView secondView(&scene);
+        secondView.resize(800, 600);
+        secondView.show();
+        REQUIRE(QTest::qWaitForWindowExposed(&secondView));
+
+        view.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Crisp);
+        secondView.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Crisp);
+        QCoreApplication::processEvents();
+
+        CHECK(nodeGraphics->cacheMode() == QGraphicsItem::NoCache);
+    }
+}
+
 TEST_CASE("scaleChanged signal", "[zoom]")
 {
     auto app = applicationSetup();

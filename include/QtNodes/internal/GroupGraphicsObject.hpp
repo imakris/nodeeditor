@@ -107,6 +107,11 @@ public:
    */
     void moveConnections();
 
+    /// Recomputes the group rect and icon positions.  Call when child
+    /// nodes move or the possible-child changes instead of deferring
+    /// geometry work to paint().
+    void updateGroupGeometry();
+
     /**
    * @brief Moves the position of all the nodes of this group by the amount given.
    * @param offset 2D vector representing the amount by which the group has moved.
@@ -209,6 +214,9 @@ public:
    * @brief _borderPen Object that dictates how the group border should be drawn.
    */
     QPen _borderPen;
+
+private:
+    QRectF compute_group_rect() const;
 
 private:
     /**

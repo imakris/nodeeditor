@@ -54,29 +54,51 @@ NodeStyle const &NodeDelegateModel::nodeStyle() const
 void NodeDelegateModel::setNodeStyle(NodeStyle const &style)
 {
     _nodeStyle = style;
+    _processingStatusIconDirty = true;
 }
 
 QPixmap NodeDelegateModel::processingStatusIcon() const
 {
-    int resolution = _nodeStyle.processingIconStyle._resolution;
-    switch (_processingStatus) {
-    case NodeProcessingStatus::NoStatus:
+    int const resolution = _nodeStyle.processingIconStyle._resolution;
+
+    if (_processingStatus == NodeProcessingStatus::NoStatus) {
         return {};
-    case NodeProcessingStatus::Updated:
-        return _nodeStyle.statusUpdated.pixmap(resolution);
-    case NodeProcessingStatus::Processing:
-        return _nodeStyle.statusProcessing.pixmap(resolution);
-    case NodeProcessingStatus::Pending:
-        return _nodeStyle.statusPending.pixmap(resolution);
-    case NodeProcessingStatus::Empty:
-        return _nodeStyle.statusEmpty.pixmap(resolution);
-    case NodeProcessingStatus::Failed:
-        return _nodeStyle.statusInvalid.pixmap(resolution);
-    case NodeProcessingStatus::Partial:
-        return _nodeStyle.statusPartial.pixmap(resolution);
     }
 
-    return {};
+    if (!_processingStatusIconDirty && _cachedProcessingStatus == _processingStatus
+        && _cachedProcessingStatusResolution == resolution) {
+        return _cachedProcessingStatusIcon;
+    }
+
+    switch (_processingStatus) {
+    case NodeProcessingStatus::NoStatus:
+        _cachedProcessingStatusIcon = {};
+        break;
+    case NodeProcessingStatus::Updated:
+        _cachedProcessingStatusIcon = _nodeStyle.statusUpdated.pixmap(resolution);
+        break;
+    case NodeProcessingStatus::Processing:
+        _cachedProcessingStatusIcon = _nodeStyle.statusProcessing.pixmap(resolution);
+        break;
+    case NodeProcessingStatus::Pending:
+        _cachedProcessingStatusIcon = _nodeStyle.statusPending.pixmap(resolution);
+        break;
+    case NodeProcessingStatus::Empty:
+        _cachedProcessingStatusIcon = _nodeStyle.statusEmpty.pixmap(resolution);
+        break;
+    case NodeProcessingStatus::Failed:
+        _cachedProcessingStatusIcon = _nodeStyle.statusInvalid.pixmap(resolution);
+        break;
+    case NodeProcessingStatus::Partial:
+        _cachedProcessingStatusIcon = _nodeStyle.statusPartial.pixmap(resolution);
+        break;
+    }
+
+    _cachedProcessingStatus = _processingStatus;
+    _cachedProcessingStatusResolution = resolution;
+    _processingStatusIconDirty = false;
+
+    return _cachedProcessingStatusIcon;
 }
 
 void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap &pixmap)
@@ -103,16 +125,20 @@ void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap
         _nodeStyle.statusPartial = QIcon(pixmap);
         break;
     }
+
+    _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setStatusIconStyle(const ProcessingIconStyle &style)
 {
     _nodeStyle.processingIconStyle = style;
+    _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setNodeProcessingStatus(NodeProcessingStatus status)
 {
     _processingStatus = status;
+    _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setBackgroundColor(QColor const &color)

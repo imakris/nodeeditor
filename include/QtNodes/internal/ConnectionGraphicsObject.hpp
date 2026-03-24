@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <utility>
 
 #include <QtCore/QUuid>
+#include <QtGui/QPainterPath>
 #include <QtWidgets/QGraphicsObject>
 
 #include "ConnectionState.hpp"
@@ -49,6 +51,18 @@ public:
 
     std::pair<QPointF, QPointF> pointsC1C2() const;
 
+    /// Cached cubic bezier path, rebuilt only when endpoints change.
+    QPainterPath const &cachedCubicPath() const;
+
+    /// Cached painter stroke for hit testing, rebuilt only when endpoints change.
+    QPainterPath const &cachedStrokePath() const;
+
+    int cachedSamplePointCount() const { return k_path_sample_count; }
+
+    QPointF const &cachedSamplePoint(int index) const;
+
+    QPointF const &cachedMidPoint() const;
+
     void setEndPoint(PortType portType, QPointF const &point);
 
     /// Updates the position of both ends
@@ -83,6 +97,11 @@ private:
     std::pair<QPointF, QPointF> pointsC1C2Vertical() const;
 
 private:
+    void rebuildCachedGeometry() const;
+
+private:
+    static constexpr int k_path_sample_count = 61;
+
     ConnectionId _connectionId;
 
     AbstractGraphModel &_graphModel;
@@ -91,6 +110,13 @@ private:
 
     mutable QPointF _out;
     mutable QPointF _in;
+
+    mutable bool _geometryDirty = true;
+    mutable QRectF _cachedBoundingRect;
+    mutable QPainterPath _cachedCubicPath;
+    mutable QPainterPath _cachedStrokePath;
+    mutable std::array<QPointF, k_path_sample_count> _cachedSamplePoints{};
+    mutable QPointF _cachedMidPoint;
 };
 
 } // namespace QtNodes

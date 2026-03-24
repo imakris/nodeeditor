@@ -48,7 +48,50 @@ QPointF map_to_scene_exact(QGraphicsView const &view, QPointF const &viewPoint)
     return invertedTransform.map(viewPoint);
 }
 
-void set_node_cache_mode(QGraphicsScene *scene, QGraphicsItem::CacheMode mode)
+QList<QtNodes::GraphicsView *> graphics_views(QGraphicsScene *scene)
+{
+    QList<QtNodes::GraphicsView *> result;
+    if (!scene) {
+        return result;
+    }
+
+    QList<QGraphicsView *> const views = scene->views();
+    for (QGraphicsView *view : views) {
+        if (auto *graphicsView = qobject_cast<QtNodes::GraphicsView *>(view)) {
+            result.push_back(graphicsView);
+        }
+    }
+
+    return result;
+}
+
+QGraphicsItem::CacheMode effective_node_cache_mode(QGraphicsScene *scene)
+{
+    QList<QtNodes::GraphicsView *> const views = graphics_views(scene);
+    if (views.empty()) {
+        return QGraphicsItem::DeviceCoordinateCache;
+    }
+
+    // Item cache mode is shared by all attached views. Mixed-view scenes keep node
+    // rendering uncached so one view cannot force another into an incompatible mode.
+    if (views.size() > 1) {
+        return QGraphicsItem::NoCache;
+    }
+
+    QtNodes::GraphicsView const &view = *views.front();
+    if (view.isZoomAnimating()) {
+        return QGraphicsItem::NoCache;
+    }
+
+    return view.rasterizationPolicy() == QtNodes::GraphicsView::RasterizationPolicy::Consistent
+        ? QGraphicsItem::NoCache
+        : QGraphicsItem::DeviceCoordinateCache;
+}
+
+void set_node_cache_mode(
+    QGraphicsScene *scene,
+    QGraphicsItem::CacheMode mode,
+    bool invalidate_cached_content = false)
 {
     if (!scene) {
         return;
@@ -56,9 +99,20 @@ void set_node_cache_mode(QGraphicsScene *scene, QGraphicsItem::CacheMode mode)
 
     for (QGraphicsItem *item : scene->items()) {
         if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject *>(item)) {
+            if (invalidate_cached_content && mode != QGraphicsItem::NoCache) {
+                item->setCacheMode(QGraphicsItem::NoCache);
+            }
             item->setCacheMode(mode);
+            item->update();
         }
     }
+}
+
+void refresh_node_cache_mode(QGraphicsScene *scene, bool invalidate_cached_content = false)
+{
+    set_node_cache_mode(scene,
+                        effective_node_cache_mode(scene),
+                        invalidate_cached_content);
 }
 } // namespace
 
@@ -120,7 +174,14 @@ QAction *GraphicsView::deleteSelectionAction() const
 
 void GraphicsView::setScene(BasicGraphicsScene *scene)
 {
+    QGraphicsScene *oldScene = this->scene();
+
     QGraphicsView::setScene(scene);
+    if (oldScene && oldScene != scene) {
+        refresh_node_cache_mode(oldScene, true);
+        oldScene->update();
+    }
+
     if (!scene) {
         // Clear actions.
         delete _clearSelectionAction;
@@ -291,11 +352,12 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
                                -zoom_max_velocity, zoom_max_velocity);
     _zoomPivot = event->position();
 
-    applyZoomStep();
-
     if (_zoomTimerId == 0 && std::abs(_zoomVelocity) >= zoom_velocity_epsilon) {
         _zoomTimerId = startTimer(zoom_timer_interval_ms);
+        refresh_node_cache_mode(scene(), true);
     }
+
+    applyZoomStep();
 
     event->accept();
 }
@@ -370,6 +432,7 @@ void GraphicsView::applyZoomFactor(double factor)
 void GraphicsView::stopZoomTimer()
 {
     bool const hadFractionalOffset = std::abs(transform().dx()) > 1e-6 || std::abs(transform().dy()) > 1e-6;
+    bool const was_zoom_animating = (_zoomTimerId != 0);
 
     if (_zoomTimerId != 0) {
         killTimer(_zoomTimerId);
@@ -390,6 +453,14 @@ void GraphicsView::stopZoomTimer()
     }
 
     _zoomVelocity = 0.0;
+
+    if (was_zoom_animating) {
+        refresh_node_cache_mode(scene(), true);
+        if (scene()) {
+            scene()->update();
+        }
+        viewport()->update();
+    }
 }
 
 double GraphicsView::getScale() const
@@ -414,6 +485,11 @@ void GraphicsView::setTextRenderingPolicy(TextRenderingPolicy policy)
     }
 
     _textRenderingPolicy = policy;
+
+    refresh_node_cache_mode(scene(), true);
+    if (scene()) {
+        scene()->update();
+    }
     viewport()->update();
 }
 
@@ -717,7 +793,6 @@ void GraphicsView::apply_rasterization_policy()
 {
     if (_rasterizationPolicy == RasterizationPolicy::Consistent) {
         setCacheMode(QGraphicsView::CacheNone);
-        set_node_cache_mode(scene(), QGraphicsItem::NoCache);
     }
     else {
         if (std::abs(transform().dx()) > 1e-6 || std::abs(transform().dy()) > 1e-6) {
@@ -734,9 +809,9 @@ void GraphicsView::apply_rasterization_policy()
         }
 
         setCacheMode(QGraphicsView::CacheBackground);
-        set_node_cache_mode(scene(), QGraphicsItem::DeviceCoordinateCache);
     }
 
+    refresh_node_cache_mode(scene(), true);
     if (scene()) {
         scene()->update();
     }

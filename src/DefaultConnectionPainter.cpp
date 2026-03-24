@@ -7,8 +7,6 @@
 #include "NodeData.hpp"
 #include "StyleCollection.hpp"
 
-#include <QtGui/QIcon>
-
 namespace QtNodes {
 
 namespace {
@@ -27,17 +25,7 @@ QPen make_connection_pen(QColor const &color, qreal width, Qt::PenStyle style = 
 
 QPainterPath DefaultConnectionPainter::cubicPath(ConnectionGraphicsObject const &connection) const
 {
-    QPointF const &in = connection.endPoint(PortType::In);
-    QPointF const &out = connection.endPoint(PortType::Out);
-
-    auto const c1c2 = connection.pointsC1C2();
-
-    // cubic spline
-    QPainterPath cubic(out);
-
-    cubic.cubicTo(c1c2.first, c1c2.second, in);
-
-    return cubic;
+    return connection.cachedCubicPath();
 }
 
 void DefaultConnectionPainter::drawSketchLine(QPainter *painter,
@@ -139,8 +127,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
 
     bool const selected = cgo.isSelected();
 
-    auto cubic = cubicPath(cgo);
-    if (useGradientColor) {
+        auto const cubic = cubicPath(cgo);
+        if (useGradientColor) {
         painter->setBrush(Qt::NoBrush);
 
         QColor cOut = normalColorOut;
@@ -150,13 +138,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
         p.setColor(cOut);
         painter->setPen(p);
 
-        unsigned int constexpr segments = 60;
-
-        for (unsigned int i = 0ul; i < segments; ++i) {
-            double ratioPrev = double(i) / segments;
-            double ratio = double(i + 1) / segments;
-
-            if (i == segments / 2) {
+        for (int i = 0; i < cgo.cachedSamplePointCount() - 1; ++i) {
+            if (i == (cgo.cachedSamplePointCount() - 1) / 2) {
                 QColor cIn = normalColorIn;
                 if (selected)
                     cIn = cIn.darker(200);
@@ -164,19 +147,14 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
                 p.setColor(cIn);
                 painter->setPen(p);
             }
-            painter->drawLine(cubic.pointAtPercent(ratioPrev), cubic.pointAtPercent(ratio));
+            painter->drawLine(cgo.cachedSamplePoint(i), cgo.cachedSamplePoint(i + 1));
         }
 
-        {
-            QIcon icon(":convert.png");
-
-            QPixmap pixmap = icon.pixmap(QSize(22, 22));
-            QRectF const targetRect(cubic.pointAtPercent(0.50).x() - pixmap.width() / 2.0,
-                                    cubic.pointAtPercent(0.50).y() - pixmap.height() / 2.0,
-                                    pixmap.width(),
-                                    pixmap.height());
-            painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
-        }
+        QRectF const targetRect(cgo.cachedMidPoint().x() - _convertPixmap.width() / 2.0,
+                                cgo.cachedMidPoint().y() - _convertPixmap.height() / 2.0,
+                                _convertPixmap.width(),
+                                _convertPixmap.height());
+        painter->drawPixmap(targetRect, _convertPixmap, QRectF(_convertPixmap.rect()));
     } else {
         p.setColor(normalColorOut);
 
@@ -220,22 +198,7 @@ void DefaultConnectionPainter::paint(QPainter *painter, ConnectionGraphicsObject
 QPainterPath DefaultConnectionPainter::getPainterStroke(
     ConnectionGraphicsObject const &connection) const
 {
-    auto cubic = cubicPath(connection);
-
-    QPointF const &out = connection.endPoint(PortType::Out);
-    QPainterPath result(out);
-
-    unsigned int constexpr segments = 20;
-
-    for (auto i = 0ul; i < segments; ++i) {
-        double ratio = double(i + 1) / segments;
-        result.lineTo(cubic.pointAtPercent(ratio));
-    }
-
-    QPainterPathStroker stroker;
-    stroker.setWidth(10.0);
-
-    return stroker.createStroke(result);
+    return connection.cachedStrokePath();
 }
 
 #ifdef NODE_DEBUG_DRAWING

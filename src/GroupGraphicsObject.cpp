@@ -57,6 +57,8 @@ GroupGraphicsObject::GroupGraphicsObject(BasicGraphicsScene &scene, NodeGroup &n
     setZValue(-_groupAreaZValue);
 
     setAcceptHoverEvents(true);
+
+    updateGroupGeometry();
 }
 
 GroupGraphicsObject::~GroupGraphicsObject()
@@ -75,6 +77,11 @@ NodeGroup const &GroupGraphicsObject::group() const
 }
 
 QRectF GroupGraphicsObject::boundingRect() const
+{
+    return QGraphicsRectItem::boundingRect();
+}
+
+QRectF GroupGraphicsObject::compute_group_rect() const
 {
     QRectF ret{};
     for (auto &node : _group.childNodes()) {
@@ -112,6 +119,7 @@ void GroupGraphicsObject::moveNodes(const QPointF &offset)
         node->setPos(newPosition);
         node->update();
     }
+    updateGroupGeometry();
 }
 
 void GroupGraphicsObject::lock(bool locked)
@@ -133,12 +141,11 @@ bool GroupGraphicsObject::locked() const
 
 void GroupGraphicsObject::positionLockedIcon()
 {
-    _lockedGraphicsItem->setPos(
-        boundingRect().topRight()
-        + QPointF(-(_roundedBorderRadius + IconGraphicsItem::iconSize()), _roundedBorderRadius));
-    _unlockedGraphicsItem->setPos(
-        boundingRect().topRight()
-        + QPointF(-(_roundedBorderRadius + IconGraphicsItem::iconSize()), _roundedBorderRadius));
+    QPointF const icon_pos = rect().topRight()
+                             + QPointF(-(_roundedBorderRadius + IconGraphicsItem::iconSize()),
+                                       _roundedBorderRadius);
+    _lockedGraphicsItem->setPos(icon_pos);
+    _unlockedGraphicsItem->setPos(icon_pos);
 }
 
 void GroupGraphicsObject::setHovered(bool hovered)
@@ -157,11 +164,13 @@ void GroupGraphicsObject::setHovered(bool hovered)
 void GroupGraphicsObject::setPossibleChild(QtNodes::NodeGraphicsObject *possibleChild)
 {
     _possibleChild = possibleChild;
+    updateGroupGeometry();
 }
 
 void GroupGraphicsObject::unsetPossibleChild()
 {
     _possibleChild = nullptr;
+    updateGroupGeometry();
 }
 
 std::vector<std::shared_ptr<ConnectionId>> GroupGraphicsObject::connections() const
@@ -204,14 +213,22 @@ void GroupGraphicsObject::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
     lock(!locked());
 }
 
+void GroupGraphicsObject::updateGroupGeometry()
+{
+    QRectF const newRect = compute_group_rect();
+    if (newRect != rect()) {
+        prepareGeometryChange();
+        setRect(newRect);
+    }
+    positionLockedIcon();
+    update();
+}
+
 void GroupGraphicsObject::paint(QPainter *painter,
                                 const QStyleOptionGraphicsItem *option,
                                 QWidget *widget)
 {
     Q_UNUSED(widget);
-    prepareGeometryChange();
-    setRect(boundingRect());
-    positionLockedIcon();
     painter->setClipRect(option->exposedRect);
     painter->setBrush(_currentFillColor);
 

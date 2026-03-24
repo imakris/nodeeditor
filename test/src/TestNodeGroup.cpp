@@ -82,6 +82,17 @@ std::set<NodeId> toNodeIdSet(std::vector<NodeId> const &ids)
     return {ids.begin(), ids.end()};
 }
 
+QRectF groupSceneRect(NodeGroup const &group)
+{
+    auto const &groupGraphics = group.groupGraphicsObject();
+    return groupGraphics.mapRectToScene(groupGraphics.rect()).boundingRect();
+}
+
+QRectF nodeSceneRect(NodeGraphicsObject const &node)
+{
+    return node.mapRectToScene(node.boundingRect()).boundingRect();
+}
+
 } // namespace
 
 TEST_CASE("Node group creation", "[node-group]")
@@ -198,6 +209,52 @@ TEST_CASE("Adding and removing nodes from a group", "[node-group]")
         auto nodeGroup = extraNode->nodeGroup().lock();
         REQUIRE(nodeGroup);
         CHECK(nodeGroup->id() == group->id());
+    }
+
+    SECTION("Group bounds follow added removed and moved nodes")
+    {
+        NodeId firstNodeId = createNode(model, scene);
+        NodeId secondNodeId = createNode(model, scene);
+
+        model.setNodeData(firstNodeId, NodeRole::Position, QPointF(0.0, 0.0));
+        model.setNodeData(secondNodeId, NodeRole::Position, QPointF(600.0, 0.0));
+        QCoreApplication::processEvents();
+
+        auto *firstNode = scene.nodeGraphicsObject(firstNodeId);
+        auto *secondNode = scene.nodeGraphicsObject(secondNodeId);
+        REQUIRE(firstNode != nullptr);
+        REQUIRE(secondNode != nullptr);
+
+        std::vector<NodeGraphicsObject *> nodes{firstNode};
+        auto group = scene.createGroup(nodes, QStringLiteral("BoundsGroup")).lock();
+        REQUIRE(group);
+
+        QRectF initialGroupRect = groupSceneRect(*group);
+        CHECK(initialGroupRect.contains(nodeSceneRect(*firstNode)));
+        CHECK_FALSE(initialGroupRect.contains(nodeSceneRect(*secondNode)));
+
+        scene.addNodeToGroup(secondNodeId, group->id());
+        QCoreApplication::processEvents();
+
+        QRectF expandedGroupRect = groupSceneRect(*group);
+        CHECK(expandedGroupRect.contains(nodeSceneRect(*firstNode)));
+        CHECK(expandedGroupRect.contains(nodeSceneRect(*secondNode)));
+        CHECK(expandedGroupRect.width() > initialGroupRect.width());
+
+        model.setNodeData(secondNodeId, NodeRole::Position, QPointF(900.0, 120.0));
+        QCoreApplication::processEvents();
+
+        QRectF movedGroupRect = groupSceneRect(*group);
+        CHECK(movedGroupRect.contains(nodeSceneRect(*secondNode)));
+        CHECK(movedGroupRect.width() >= expandedGroupRect.width());
+
+        scene.removeNodeFromGroup(secondNodeId);
+        QCoreApplication::processEvents();
+
+        QRectF shrunkGroupRect = groupSceneRect(*group);
+        CHECK(shrunkGroupRect.contains(nodeSceneRect(*firstNode)));
+        CHECK_FALSE(shrunkGroupRect.contains(nodeSceneRect(*secondNode)));
+        CHECK(shrunkGroupRect.width() < movedGroupRect.width());
     }
 
     SECTION("Removing nodes from a group and clearing empty groups")

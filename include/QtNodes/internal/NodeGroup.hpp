@@ -121,7 +121,7 @@ private:
    * @brief Identifier of this group. It is the only unique identifier of
    * the group.
    */
-    GroupId _id;
+    GroupId _groupId;
 
     // data
     /**

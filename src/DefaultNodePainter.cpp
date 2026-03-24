@@ -12,6 +12,7 @@
 #include "NodeState.hpp"
 #include "StyleCollection.hpp"
 
+#include <QtCore/QHash>
 #include <QtCore/QMargins>
 #include <QtGui/QPainterPath>
 
@@ -23,6 +24,10 @@ namespace {
 
 GraphicsView *graphics_view(NodeGraphicsObject &ngo)
 {
+    if (auto *view = ngo.currentGraphicsView()) {
+        return view;
+    }
+
     if (!ngo.scene()) {
         return nullptr;
     }
@@ -37,17 +42,8 @@ GraphicsView *graphics_view(NodeGraphicsObject &ngo)
     return nullptr;
 }
 
-bool is_zoom_animating(NodeGraphicsObject &ngo)
+bool should_draw_text_as_path(GraphicsView *view)
 {
-    if (auto *view = graphics_view(ngo)) {
-        return view->isZoomAnimating();
-    }
-    return false;
-}
-
-bool should_draw_text_as_path(NodeGraphicsObject &ngo)
-{
-    auto *view = graphics_view(ngo);
     if (!view) {
         return false;
     }
@@ -64,15 +60,15 @@ bool should_draw_text_as_path(NodeGraphicsObject &ngo)
     return false;
 }
 
-void configure_text_painter(QPainter *painter, NodeGraphicsObject &ngo)
+void configure_text_painter(QPainter *painter, GraphicsView *view)
 {
     painter->setRenderHint(QPainter::TextAntialiasing, true);
 
-    if (should_draw_text_as_path(ngo)) {
+    if (should_draw_text_as_path(view)) {
         return;
     }
 
-    if (!is_zoom_animating(ngo)) {
+    if (!view || !view->isZoomAnimating()) {
         return;
     }
 
@@ -81,19 +77,59 @@ void configure_text_painter(QPainter *painter, NodeGraphicsObject &ngo)
     painter->setFont(font);
 }
 
+// Paths are cached at the origin and the painter is translated to the
+// draw position.  The cache key combines QFont::key() (which encodes
+// family, size, weight, style, hinting, etc.) with the text string.
+// For typical node scenes the cache holds ~15 entries and never evicts.
+QHash<QString, QPainterPath> s_text_path_cache;
+QHash<QRgb, QPixmap> s_validation_icon_cache;
+
+QPixmap validation_icon(QIcon const &icon, QColor const &color)
+{
+    auto it = s_validation_icon_cache.constFind(color.rgba());
+    if (it != s_validation_icon_cache.constEnd()) {
+        return *it;
+    }
+
+    QPixmap pixmap = icon.pixmap(QSize(16, 16));
+
+    QPainter imgPainter(&pixmap);
+    imgPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    imgPainter.fillRect(pixmap.rect(), color);
+    imgPainter.end();
+
+    return s_validation_icon_cache.insert(color.rgba(), std::move(pixmap)).value();
+}
+
 void draw_text(
     QPainter *painter,
-    NodeGraphicsObject &ngo,
+    GraphicsView *view,
     QPointF const &position,
     QString const &text,
     QColor const &color,
     QFont const &font)
 {
-    if (should_draw_text_as_path(ngo)) {
-        QPainterPath path;
-        path.addText(position, font, text);
+    if (should_draw_text_as_path(view)) {
+        QString const key = font.key() + text;
+
+        auto it = s_text_path_cache.constFind(key);
+        if (it == s_text_path_cache.constEnd()) {
+            QPainterPath path;
+            path.addText(QPointF(0, 0), font, text);
+            it = s_text_path_cache.insert(key, std::move(path));
+
+            // Prevent unbounded growth for highly dynamic scenes.
+            if (s_text_path_cache.size() > 500) {
+                QPainterPath keep = *it;
+                s_text_path_cache.clear();
+                it = s_text_path_cache.insert(key, std::move(keep));
+            }
+        }
+
         painter->setPen(Qt::NoPen);
-        painter->fillPath(path, color);
+        painter->translate(position);
+        painter->fillPath(*it, color);
+        painter->translate(-position);
         return;
     }
 
@@ -106,28 +142,47 @@ void draw_text(
 
 void DefaultNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo) const
 {
-    // TODO?
-    //AbstractNodeGeometry & geometry = ngo.nodeScene()->nodeGeometry();
-    //geometry.recomputeSizeIfFontChanged(painter->font());
+    AbstractGraphModel &model = ngo.graphModel();
+    NodeId const nodeId = ngo.nodeId();
+    GraphicsView *view = graphics_view(ngo);
 
-    drawNodeRect(painter, ngo);
+    // Fast path: get NodeStyle directly from the delegate model, avoiding
+    // the NodeStyle -> JSON -> QVariant -> JSON -> NodeStyle round-trip.
+    NodeStyle const *stylePtr = nullptr;
+    if (auto *dfModel = dynamic_cast<DataFlowGraphModel *>(&model)) {
+        if (auto *delegate = dfModel->delegateModel<NodeDelegateModel>(nodeId)) {
+            stylePtr = &delegate->nodeStyle();
+        }
+    }
+    // Fallback: only constructed when the fast path above cannot resolve the
+    // style.  The default NodeStyle() constructor is expensive (loads SVG
+    // icons and parses JSON from resources), so it must not run on every paint.
+    NodeStyle fallbackStorage(QJsonObject{});
+    if (!stylePtr) {
+        QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
+        fallbackStorage = NodeStyle(json.object());
+        stylePtr = &fallbackStorage;
+    }
+    NodeStyle const &style = *stylePtr;
 
-    drawConnectionPoints(painter, ngo);
+    drawNodeRect(painter, ngo, style);
 
-    drawFilledConnectionPoints(painter, ngo);
+    drawConnectionPoints(painter, ngo, style);
 
-    drawNodeCaption(painter, ngo);
+    drawFilledConnectionPoints(painter, ngo, style);
 
-    drawEntryLabels(painter, ngo);
+    drawNodeCaption(painter, ngo, style, view);
+
+    drawEntryLabels(painter, ngo, style, view);
 
     drawProcessingIndicator(painter, ngo);
 
     drawResizeRect(painter, ngo);
 
-    drawValidationIcon(painter, ngo);
+    drawValidationIcon(painter, ngo, style);
 }
 
-void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
 {
     AbstractGraphModel &model = ngo.graphModel();
 
@@ -136,10 +191,6 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
     QSize size = geometry.size(nodeId);
-
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-
-    NodeStyle nodeStyle(json.object());
 
     QVariant var = model.nodeData(nodeId, NodeRole::ValidationState);
     bool invalid = false;
@@ -167,14 +218,16 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
     if (ngo.nodeState().hovered()) {
         QPen p(color, nodeStyle.HoveredPenWidth);
         painter->setPen(p);
-    } else {
+    }
+    else {
         QPen p(color, nodeStyle.PenWidth);
         painter->setPen(p);
     }
 
     if (invalid) {
         painter->setBrush(color);
-    } else {
+    }
+    else {
         QLinearGradient gradient(QPointF(0.0, 0.0), QPointF(2.0, size.height()));
         gradient.setColorAt(0.0, nodeStyle.GradientColor0);
         gradient.setColorAt(0.10, nodeStyle.GradientColor1);
@@ -190,14 +243,11 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
     painter->drawRoundedRect(boundary, radius, radius);
 }
 
-void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
 {
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
-
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-    NodeStyle nodeStyle(json.object());
 
     auto const &connectionStyle = StyleCollection::connectionStyle();
 
@@ -260,14 +310,11 @@ void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObj
     }
 }
 
-void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
 {
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
-
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-    NodeStyle nodeStyle(json.object());
 
     auto diameter = nodeStyle.ConnectionPointDiameter;
 
@@ -304,7 +351,7 @@ void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraph
     }
 }
 
-void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle, GraphicsView *view) const
 {
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
@@ -317,7 +364,7 @@ void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &
 
     QFont f = painter->font();
     f.setBold(true);
-    if (!should_draw_text_as_path(ngo) && is_zoom_animating(ngo)) {
+    if (!should_draw_text_as_path(view) && view && view->isZoomAnimating()) {
         f.setHintingPreference(QFont::PreferNoHinting);
     }
     else {
@@ -326,26 +373,20 @@ void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &
 
     QPointF position = geometry.captionPosition(nodeId);
 
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-    NodeStyle nodeStyle(json.object());
-
     painter->setRenderHint(QPainter::TextAntialiasing, true);
-    draw_text(painter, ngo, position, name, nodeStyle.FontColor, f);
+    draw_text(painter, view, position, name, nodeStyle.FontColor, f);
 
     f.setBold(false);
     painter->setFont(f);
 }
 
-void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle, GraphicsView *view) const
 {
-    configure_text_painter(painter, ngo);
+    configure_text_painter(painter, view);
 
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
-
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-    NodeStyle nodeStyle(json.object());
 
     for (PortType portType : {PortType::Out, PortType::In}) {
         unsigned int n = model.nodeData<unsigned int>(nodeId,
@@ -375,7 +416,7 @@ void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &
 
             QColor const textColor = connected.empty() ? nodeStyle.FontColorFaded
                                                        : nodeStyle.FontColor;
-            draw_text(painter, ngo, p, s, textColor, painter->font());
+            draw_text(painter, view, p, s, textColor, painter->font());
         }
     }
 }
@@ -439,7 +480,7 @@ void DefaultNodePainter::drawProcessingIndicator(QPainter *painter, NodeGraphics
     painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
 }
 
-void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObject &ngo) const
+void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
 {
     AbstractGraphModel &model = ngo.graphModel();
     NodeId const nodeId = ngo.nodeId();
@@ -453,22 +494,13 @@ void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObjec
     if (state._state == NodeValidationState::State::Valid)
         return;
 
-    QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-    NodeStyle nodeStyle(json.object());
-
     QSize size = geometry.size(nodeId);
 
-    QIcon icon(":/info-tooltip.svg");
-    QSize iconSize(16, 16);
-    QPixmap pixmap = icon.pixmap(iconSize);
+    QSize const iconSize(16, 16);
 
     QColor color = (state._state == NodeValidationState::State::Error) ? nodeStyle.ErrorColor
                                                                        : nodeStyle.WarningColor;
-
-    QPainter imgPainter(&pixmap);
-    imgPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    imgPainter.fillRect(pixmap.rect(), color);
-    imgPainter.end();
+    QPixmap const pixmap = validation_icon(_toolTipIcon, color);
 
     QPointF center(size.width(), 0.0);
     center += QPointF(iconSize.width() / 2.0, -iconSize.height() / 2.0);

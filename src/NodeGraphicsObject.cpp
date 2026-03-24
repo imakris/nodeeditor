@@ -22,15 +22,36 @@ namespace QtNodes {
 
 namespace {
 
+GraphicsView *graphics_view_from_widget(QWidget *widget)
+{
+    while (widget) {
+        if (auto *graphicsView = qobject_cast<GraphicsView *>(widget)) {
+            return graphicsView;
+        }
+        widget = widget->parentWidget();
+    }
+
+    return nullptr;
+}
+
 QGraphicsItem::CacheMode initial_cache_mode(BasicGraphicsScene &scene)
 {
     QList<QGraphicsView *> const views = scene.views();
+    int graphics_view_count = 0;
+
     for (QGraphicsView *view : views) {
         if (auto *graphicsView = qobject_cast<GraphicsView *>(view)) {
-            return graphicsView->rasterizationPolicy() == GraphicsView::RasterizationPolicy::Consistent
-                ? QGraphicsItem::NoCache
-                : QGraphicsItem::DeviceCoordinateCache;
+            ++graphics_view_count;
+            if (graphicsView->rasterizationPolicy() == GraphicsView::RasterizationPolicy::Consistent) {
+                return QGraphicsItem::NoCache;
+            }
         }
+    }
+
+    // Cache mode is shared per item, so scenes rendered by multiple views fall back
+    // to uncached rendering instead of letting one view's policy govern the others.
+    if (graphics_view_count > 1) {
+        return QGraphicsItem::NoCache;
     }
 
     return QGraphicsItem::DeviceCoordinateCache;
@@ -187,7 +208,7 @@ void NodeGraphicsObject::reactToConnection(ConnectionGraphicsObject const *cgo)
     update();
 }
 
-void NodeGraphicsObject::paint(QPainter *painter, QStyleOptionGraphicsItem const *option, QWidget *)
+void NodeGraphicsObject::updateValidationTooltip()
 {
     QString tooltip;
     QVariant var = _graphModel.nodeData(_nodeId, NodeRole::ValidationState);
@@ -198,10 +219,15 @@ void NodeGraphicsObject::paint(QPainter *painter, QStyleOptionGraphicsItem const
         }
     }
     setToolTip(tooltip);
+}
 
+void NodeGraphicsObject::paint(QPainter *painter, QStyleOptionGraphicsItem const *option, QWidget *widget)
+{
     painter->setClipRect(option->exposedRect);
 
+    _currentGraphicsView = graphics_view_from_widget(widget);
     nodeScene()->nodePainter().paint(painter, *this);
+    _currentGraphicsView = nullptr;
 }
 
 QVariant NodeGraphicsObject::itemChange(GraphicsItemChange change, const QVariant &value)
@@ -329,6 +355,8 @@ void NodeGraphicsObject::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
                     nodeGroup->groupGraphicsObject().moveConnections();
                     if (nodeGroup->groupGraphicsObject().locked()) {
                         nodeGroup->groupGraphicsObject().moveNodes(diff);
+                    } else {
+                        nodeGroup->groupGraphicsObject().updateGroupGeometry();
                     }
                 } else {
                     moveConnections();

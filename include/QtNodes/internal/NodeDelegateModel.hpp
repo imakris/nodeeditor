@@ -196,6 +196,11 @@ private:
     NodeValidationState _nodeValidationState;
 
     NodeProcessingStatus _processingStatus{NodeProcessingStatus::NoStatus};
+
+    mutable bool _processingStatusIconDirty{true};
+    mutable NodeProcessingStatus _cachedProcessingStatus{NodeProcessingStatus::NoStatus};
+    mutable int _cachedProcessingStatusResolution{0};
+    mutable QPixmap _cachedProcessingStatusIcon;
 };
 
 } // namespace QtNodes

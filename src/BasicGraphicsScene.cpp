@@ -309,6 +309,7 @@ void BasicGraphicsScene::traverseGraphAndPopulateGraphicsObjects()
     // First create all the nodes.
     for (NodeId const nodeId : allNodeIds) {
         _nodeGraphicsObjects[nodeId] = std::make_unique<NodeGraphicsObject>(*this, nodeId);
+        _nodeGraphicsObjects[nodeId]->updateValidationTooltip();
     }
 
     // Then for each node check output connections and insert them.
@@ -332,6 +333,7 @@ void BasicGraphicsScene::updateAttachedNodes(ConnectionId const connectionId,
     auto node = nodeGraphicsObject(getNodeId(portType, connectionId));
 
     if (node) {
+        node->updateValidationTooltip();
         node->update();
     }
 }
@@ -379,6 +381,7 @@ void BasicGraphicsScene::onNodeDeleted(NodeId const nodeId)
 void BasicGraphicsScene::onNodeCreated(NodeId const nodeId)
 {
     _nodeGraphicsObjects[nodeId] = std::make_unique<NodeGraphicsObject>(*this, nodeId);
+    _nodeGraphicsObjects[nodeId]->updateValidationTooltip();
 
     Q_EMIT modified(this);
 }
@@ -388,6 +391,9 @@ void BasicGraphicsScene::onNodePositionUpdated(NodeId const nodeId)
     auto node = nodeGraphicsObject(nodeId);
     if (node) {
         node->setPos(_graphModel.nodeData(nodeId, NodeRole::Position).value<QPointF>());
+        if (auto group = node->nodeGroup().lock()) {
+            group->groupGraphicsObject().updateGroupGeometry();
+        }
         node->update();
         _nodeDrag = true;
     }
@@ -402,6 +408,10 @@ void BasicGraphicsScene::onNodeUpdated(NodeId const nodeId)
 
         _nodeGeometry->recomputeSize(nodeId);
 
+        node->updateValidationTooltip();
+        if (auto group = node->nodeGroup().lock()) {
+            group->groupGraphicsObject().updateGroupGeometry();
+        }
         node->updateQWidgetEmbedPos();
         node->update();
         node->moveConnections();

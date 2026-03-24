@@ -1,7 +1,9 @@
 #pragma once
 
+#include <QtGui/QIcon>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
+#include <QtGui/QPixmap>
 
 #include "AbstractConnectionPainter.hpp"
 #include "Definitions.hpp"
@@ -24,6 +26,9 @@ private:
 #ifdef NODE_DEBUG_DRAWING
     void debugDrawing(QPainter *painter, ConnectionGraphicsObject const &cgo) const;
 #endif
+
+private:
+    QPixmap _convertPixmap{QIcon(QStringLiteral(":/convert.png")).pixmap(QSize(22, 22))};
 };
 
 } // namespace QtNodes

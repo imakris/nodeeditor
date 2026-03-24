@@ -21,7 +21,7 @@ NodeGroup::NodeGroup(std::vector<NodeGraphicsObject *> nodes,
                      QObject *parent)
     : QObject(parent)
     , _name(std::move(name))
-    , _id(groupId)
+    , _groupId(groupId)
     , _childNodes(std::move(nodes))
     , _groupGraphicsObject(nullptr)
 {
@@ -33,7 +33,7 @@ QByteArray NodeGroup::saveToFile() const
     QJsonObject groupJson;
 
     groupJson["name"] = _name;
-    groupJson["id"] = static_cast<qint64>(_id);
+    groupJson["id"] = static_cast<qint64>(_groupId);
 
     QJsonArray nodesJson;
     for (auto const &node : _childNodes) {
@@ -55,7 +55,7 @@ QByteArray NodeGroup::saveToFile() const
 
 QtNodes::GroupId NodeGroup::id() const
 {
-    return _id;
+    return _groupId;
 }
 
 GroupGraphicsObject &NodeGroup::groupGraphicsObject()
@@ -112,6 +112,9 @@ void NodeGroup::addNode(NodeGraphicsObject *node)
     if (_groupGraphicsObject && _groupGraphicsObject->locked()) {
         node->lock(true);
     }
+    if (_groupGraphicsObject) {
+        _groupGraphicsObject->updateGroupGeometry();
+    }
 }
 
 void NodeGroup::removeNode(NodeGraphicsObject *node)
@@ -121,6 +124,8 @@ void NodeGroup::removeNode(NodeGraphicsObject *node)
     if (nodeIt != _childNodes.end()) {
         (*nodeIt)->unsetNodeGroup();
         _childNodes.erase(nodeIt);
-        groupGraphicsObject().positionLockedIcon();
+        if (_groupGraphicsObject) {
+            _groupGraphicsObject->updateGroupGeometry();
+        }
     }
 }
