@@ -315,20 +315,33 @@ void GraphicsView::applyZoomStep()
 void GraphicsView::applyZoomFactor(double factor)
 {
     QPointF const scenePivot = mapToScene(_zoomPivot.toPoint());
+    double const newScale = transform().m11() * factor;
+
+    // Compute total offset needed so scenePivot appears at _zoomPivot.
+    // Mapping: widgetPos = transform * scenePos - scrollOffset
+    // We need: _zoomPivot = newScale * scenePivot + (tx,ty) - (hbar,vbar)
+    // Split into integer scrollbar values and sub-pixel transform translation
+    // to avoid the whole-pixel jumps that integer scrollbars cause.
+    QPointF const fullOffset(newScale * scenePivot.x() - _zoomPivot.x(),
+                             newScale * scenePivot.y() - _zoomPivot.y());
+
+    int const hval = qRound(fullOffset.x());
+    int const vval = qRound(fullOffset.y());
+    double const tx = hval - fullOffset.x();
+    double const ty = vval - fullOffset.y();
+
+    QTransform t;
+    t.translate(tx, ty);
+    t.scale(newScale, newScale);
 
     auto const savedAnchor = transformationAnchor();
     setTransformationAnchor(QGraphicsView::NoAnchor);
-
-    scale(factor, factor);
-
-    QPointF const newPivot = mapFromScene(scenePivot);
-    QPointF const shift = newPivot - _zoomPivot;
-    horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(shift.x()));
-    verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(shift.y()));
-
+    setTransform(t, false);
+    horizontalScrollBar()->setValue(hval);
+    verticalScrollBar()->setValue(vval);
     setTransformationAnchor(savedAnchor);
 
-    Q_EMIT scaleChanged(transform().m11());
+    Q_EMIT scaleChanged(newScale);
 }
 
 void GraphicsView::stopZoomTimer()
@@ -336,6 +349,13 @@ void GraphicsView::stopZoomTimer()
     if (_zoomTimerId != 0) {
         killTimer(_zoomTimerId);
         _zoomTimerId = 0;
+
+        // Remove sub-pixel translation from transform so normal interaction
+        // (hit testing, panning) uses a clean scale-only transform.
+        double const s = transform().m11();
+        QTransform clean;
+        clean.scale(s, s);
+        setTransform(clean, false);
 
         if (scene()) {
             for (QGraphicsItem *item : scene()->items()) {
