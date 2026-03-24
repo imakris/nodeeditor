@@ -82,6 +82,8 @@ protected:
 
     void showEvent(QShowEvent *event) override;
 
+    void timerEvent(QTimerEvent *event) override;
+
 protected:
     BasicGraphicsScene *nodeScene();
 
@@ -98,5 +100,13 @@ private:
 
     QPointF _clickPos;
     ScaleRange _scaleRange;
+
+    void applyZoomStep();
+    void applyZoomFactor(double factor);
+    void stopZoomTimer();
+
+    double _zoomVelocity = 0.0;
+    QPointF _zoomPivot;
+    int _zoomTimerId = 0;
 };
 } // namespace QtNodes

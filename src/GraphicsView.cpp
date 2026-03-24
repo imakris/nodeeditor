@@ -24,7 +24,19 @@
 #include <QtOpenGL>
 #include <QtWidgets>
 
+#include <QtCore/QTimerEvent>
+
+#include <algorithm>
 #include <cmath>
+
+namespace {
+constexpr double zoom_friction = 0.75;
+constexpr double zoom_impulse_per_step = 1.0;
+constexpr double zoom_max_velocity = 5.0;
+constexpr double zoom_per_notch = 1.05;
+constexpr int zoom_timer_interval_ms = 16;
+constexpr double zoom_velocity_epsilon = 0.001;
+} // namespace
 
 using QtNodes::BasicGraphicsScene;
 using QtNodes::DataFlowGraphModel;
@@ -246,12 +258,79 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
         return;
     }
 
-    double const d = delta.y() / std::abs(delta.y());
+    double const steps = delta.y() / 120.0;
+    _zoomVelocity = std::clamp(_zoomVelocity + steps * zoom_impulse_per_step,
+                               -zoom_max_velocity, zoom_max_velocity);
+    _zoomPivot = event->position();
 
-    if (d > 0.0)
-        scaleUp();
-    else
-        scaleDown();
+    if (_zoomTimerId == 0) {
+        _zoomTimerId = startTimer(zoom_timer_interval_ms);
+    }
+}
+
+void GraphicsView::timerEvent(QTimerEvent *event)
+{
+    if (event->timerId() == _zoomTimerId) {
+        applyZoomStep();
+    } else {
+        QGraphicsView::timerEvent(event);
+    }
+}
+
+void GraphicsView::applyZoomStep()
+{
+    if (std::abs(_zoomVelocity) < zoom_velocity_epsilon) {
+        stopZoomTimer();
+        return;
+    }
+
+    static double const base_k = std::pow(zoom_per_notch,
+                                          (1.0 - zoom_friction) / zoom_impulse_per_step);
+    double const factor = std::pow(base_k, _zoomVelocity);
+    double const current_scale = transform().m11();
+    double const new_scale = current_scale * factor;
+
+    if (_scaleRange.maximum > 0 && new_scale > _scaleRange.maximum) {
+        applyZoomFactor(_scaleRange.maximum / current_scale);
+        stopZoomTimer();
+        return;
+    }
+    if (_scaleRange.minimum > 0 && new_scale < _scaleRange.minimum) {
+        applyZoomFactor(_scaleRange.minimum / current_scale);
+        stopZoomTimer();
+        return;
+    }
+
+    applyZoomFactor(factor);
+    _zoomVelocity *= zoom_friction;
+}
+
+void GraphicsView::applyZoomFactor(double factor)
+{
+    QPointF const scenePivot = mapToScene(_zoomPivot.toPoint());
+
+    auto const savedAnchor = transformationAnchor();
+    setTransformationAnchor(QGraphicsView::NoAnchor);
+
+    scale(factor, factor);
+
+    QPointF const newPivot = mapFromScene(scenePivot);
+    QPointF const shift = newPivot - _zoomPivot;
+    horizontalScrollBar()->setValue(horizontalScrollBar()->value() + qRound(shift.x()));
+    verticalScrollBar()->setValue(verticalScrollBar()->value() + qRound(shift.y()));
+
+    setTransformationAnchor(savedAnchor);
+
+    Q_EMIT scaleChanged(transform().m11());
+}
+
+void GraphicsView::stopZoomTimer()
+{
+    if (_zoomTimerId != 0) {
+        killTimer(_zoomTimerId);
+        _zoomTimerId = 0;
+    }
+    _zoomVelocity = 0.0;
 }
 
 double GraphicsView::getScale() const
