@@ -420,6 +420,21 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
 {
     QGraphicsView::drawBackground(painter, r);
 
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
+    qreal x_offset = 0.0;
+    qreal y_offset = 0.0;
+
+    QTransform const view_transform = transform();
+    qreal const scale_x = std::abs(view_transform.m11());
+    qreal const scale_y = std::abs(view_transform.m22());
+    if (scale_x > 0.0) {
+        x_offset = 0.5 / scale_x;
+    }
+    if (scale_y > 0.0) {
+        y_offset = 0.5 / scale_y;
+    }
+
     auto drawGrid = [&](double gridStep) {
         QRect windowRect = rect();
         QPointF tl = mapToScene(windowRect.topLeft());
@@ -432,14 +447,16 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
 
         // vertical lines
         for (int xi = int(left); xi <= int(right); ++xi) {
-            QLineF line(xi * gridStep, bottom * gridStep, xi * gridStep, top * gridStep);
+            qreal const x = xi * gridStep + x_offset;
+            QLineF line(x, bottom * gridStep, x, top * gridStep);
 
             painter->drawLine(line);
         }
 
         // horizontal lines
         for (int yi = int(bottom); yi <= int(top); ++yi) {
-            QLineF line(left * gridStep, yi * gridStep, right * gridStep, yi * gridStep);
+            qreal const y = yi * gridStep + y_offset;
+            QLineF line(left * gridStep, y, right * gridStep, y);
             painter->drawLine(line);
         }
     };
@@ -447,11 +464,13 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
     auto const &flowViewStyle = StyleCollection::flowViewStyle();
 
     QPen pfine(flowViewStyle.FineGridColor, 1.0);
+    pfine.setCosmetic(true);
 
     painter->setPen(pfine);
     drawGrid(15);
 
     QPen p(flowViewStyle.CoarseGridColor, 1.0);
+    p.setCosmetic(true);
 
     painter->setPen(p);
     drawGrid(150);

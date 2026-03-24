@@ -11,6 +11,20 @@
 
 namespace QtNodes {
 
+namespace {
+
+QPen make_connection_pen(QColor const &color, qreal width, Qt::PenStyle style = Qt::SolidLine)
+{
+    QPen pen(color);
+    pen.setWidthF(width);
+    pen.setStyle(style);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    return pen;
+}
+
+} // namespace
+
 QPainterPath DefaultConnectionPainter::cubicPath(ConnectionGraphicsObject const &connection) const
 {
     QPointF const &in = connection.endPoint(PortType::In);
@@ -34,10 +48,9 @@ void DefaultConnectionPainter::drawSketchLine(QPainter *painter,
     if (state.requiresPort() || state.frozen()) {
         auto const &connectionStyle = QtNodes::StyleCollection::connectionStyle();
 
-        QPen pen;
-        pen.setWidth(static_cast<int>(connectionStyle.constructionLineWidth()));
-        pen.setColor(connectionStyle.constructionColor());
-        pen.setStyle(Qt::DashLine);
+        QPen pen = make_connection_pen(connectionStyle.constructionColor(),
+                                       connectionStyle.constructionLineWidth(),
+                                       Qt::DashLine);
 
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
@@ -61,10 +74,9 @@ void DefaultConnectionPainter::drawHoveredOrSelected(QPainter *painter,
 
         double const lineWidth = connectionStyle.lineWidth();
 
-        QPen pen;
-        pen.setWidth(static_cast<int>(2 * lineWidth));
-        pen.setColor(selected ? connectionStyle.selectedHaloColor()
-                              : connectionStyle.hoveredColor());
+        QPen pen = make_connection_pen(selected ? connectionStyle.selectedHaloColor()
+                                               : connectionStyle.hoveredColor(),
+                                       2.0 * lineWidth);
 
         painter->setPen(pen);
         painter->setBrush(Qt::NoBrush);
@@ -123,9 +135,7 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
     double const lineWidth = connectionStyle.lineWidth();
 
     // draw normal line
-    QPen p;
-
-    p.setWidth(lineWidth);
+    QPen p = make_connection_pen(normalColorOut, lineWidth);
 
     bool const selected = cgo.isSelected();
 
@@ -181,6 +191,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
 
 void DefaultConnectionPainter::paint(QPainter *painter, ConnectionGraphicsObject const &cgo) const
 {
+    painter->setRenderHint(QPainter::Antialiasing, true);
+
     drawHoveredOrSelected(painter, cgo);
 
     drawSketchLine(painter, cgo);
