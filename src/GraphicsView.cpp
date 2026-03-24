@@ -264,6 +264,13 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
     _zoomPivot = event->position();
 
     if (_zoomTimerId == 0) {
+        if (scene()) {
+            for (QGraphicsItem *item : scene()->items()) {
+                if (qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
+                    item->setCacheMode(QGraphicsItem::NoCache);
+                }
+            }
+        }
         _zoomTimerId = startTimer(zoom_timer_interval_ms);
     }
 }
@@ -329,6 +336,14 @@ void GraphicsView::stopZoomTimer()
     if (_zoomTimerId != 0) {
         killTimer(_zoomTimerId);
         _zoomTimerId = 0;
+
+        if (scene()) {
+            for (QGraphicsItem *item : scene()->items()) {
+                if (qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
+                    item->setCacheMode(QGraphicsItem::DeviceCoordinateCache);
+                }
+            }
+        }
     }
     _zoomVelocity = 0.0;
 }
