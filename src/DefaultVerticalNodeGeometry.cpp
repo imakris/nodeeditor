@@ -27,8 +27,9 @@ QRectF DefaultVerticalNodeGeometry::boundingRect(NodeId const nodeId) const
 {
     QSize s = size(nodeId);
 
-    qreal marginSize = 2.0 * _portSpasing;
-    QMargins margins(marginSize, marginSize, marginSize, marginSize);
+    constexpr qreal base = 20.0;
+    constexpr qreal shadow_extra = 20.0;
+    QMarginsF margins(base, base, base + shadow_extra, base + shadow_extra);
 
     QRectF r(QPointF(0, 0), s);
 

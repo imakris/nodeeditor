@@ -13,7 +13,6 @@
 #include "UndoCommands.hpp"
 #include <QString>
 
-#include <QtWidgets/QGraphicsEffect>
 #include <QtWidgets/QtWidgets>
 
 #include <cstdlib>
@@ -81,15 +80,6 @@ NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
     QJsonObject nodeStyleJson = _graphModel.nodeData(_nodeId, NodeRole::Style).toJsonObject();
 
     NodeStyle nodeStyle(nodeStyleJson);
-
-    if (nodeStyle.ShadowEnabled) {
-        auto effect = new QGraphicsDropShadowEffect;
-        effect->setOffset(4, 4);
-        effect->setBlurRadius(20);
-        effect->setColor(nodeStyle.ShadowColor);
-
-        setGraphicsEffect(effect);
-    }
 
     setOpacity(nodeStyle.Opacity);
 
