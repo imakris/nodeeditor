@@ -10,6 +10,7 @@
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
 #include "NodeState.hpp"
+#include "ShadowConstants.hpp"
 #include "StyleCollection.hpp"
 
 #include <QtCore/QHash>
@@ -18,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <unordered_map>
 
 namespace QtNodes {
@@ -28,29 +30,25 @@ namespace {
 // 9-slice shadow atlas
 // ============================================================================
 
-// Fixed geometry for the shadow.
-constexpr double k_shadow_offset_x = 2.0;
-constexpr double k_shadow_offset_y = 2.0;
+// Shadow geometry is shared with the node geometry classes via
+// ShadowConstants.hpp so that the painted extents never exceed
+// the reported bounding rect.
+constexpr double k_shadow_offset_x = ShadowConstants::offsetX;
+constexpr double k_shadow_offset_y = ShadowConstants::offsetY;
 constexpr double k_node_radius     = 3.0;
 // Box blur: radius per pass, number of passes.  3 passes of radius 5
 // approximate a gaussian with sigma ~5.
 constexpr int    k_blur_radius     = 5;
 constexpr int    k_blur_passes     = 3;
-// The 9-slice margin must cover the FULL blur transition: both the
-// outer decay to zero AND the inward ramp from the shape edge up to
-// the plateau.  With 3 passes of radius 5 the effective spread is
-// ~15px in each direction.  The tile boundary is placed at
-// (outer + inner) from the atlas edge, i.e. well inside the plateau.
-constexpr int    k_outer_margin    = 18;  // outer decay to zero
-constexpr int    k_inner_margin    = 16;  // inward ramp to plateau
-constexpr int    k_shadow_margin   = k_outer_margin + k_inner_margin;
+constexpr int    k_shadow_margin   = ShadowConstants::margin;
 // Interior body: must be large relative to the blur spread so the
 // plateau reaches near-full alpha after blur.  With ~15px spread,
 // a 64px body ensures the center is well above the blur threshold.
 constexpr int    k_body_size       = 64;
 constexpr int    k_atlas_size      = k_body_size + 2 * k_shadow_margin;
-// Global shadow opacity (0-255) applied after blur.
-constexpr int    k_shadow_opacity  = 210;
+// Default shadow opacity (0-255) when the style color's own alpha is
+// fully opaque.  The style color's alpha channel is folded in on top.
+constexpr int    k_shadow_base_opacity = 210;
 
 void box_blur_alpha(QImage &img, int radius)
 {
@@ -121,14 +119,19 @@ QPixmap generate_shadow_atlas(QColor shadow_color, qreal dpr)
         box_blur_alpha(img, phys_blur);
     }
 
-    // Tint with shadow color and scale alpha by shadow opacity.
+    // Tint with shadow color and scale alpha.
+    // The style color's own alpha is folded in so that semi-transparent
+    // shadow colors produce a lighter shadow, matching the old
+    // QGraphicsDropShadowEffect::setColor() behavior.
     const int sr = shadow_color.red();
     const int sg = shadow_color.green();
     const int sb = shadow_color.blue();
+    const int sa = shadow_color.alpha();
+    const int combined_opacity = (k_shadow_base_opacity * sa) / 255;
     for (int y = 0; y < phys; ++y) {
         auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
         for (int x = 0; x < phys; ++x) {
-            const int a = (qAlpha(line[x]) * k_shadow_opacity) / 255;
+            const int a = (qAlpha(line[x]) * combined_opacity) / 255;
             line[x] = qPremultiply(qRgba(sr, sg, sb, a));
         }
     }
@@ -138,8 +141,8 @@ QPixmap generate_shadow_atlas(QColor shadow_color, qreal dpr)
 
 struct Shadow_cache_key
 {
-    QRgb color;
-    int dpr_micro;  // dpr * 1e6 as int for reliable comparison
+    QRgb color;   // full RGBA — different alphas produce different atlases
+    int dpr_micro; // dpr * 1e6 as int for reliable comparison
 
     bool operator==(Shadow_cache_key const &o) const
     {
@@ -157,6 +160,7 @@ struct Shadow_cache_key_hash
     }
 };
 
+// NOTE: accessed only from the GUI thread (during QGraphicsItem::paint).
 std::unordered_map<Shadow_cache_key, QPixmap, Shadow_cache_key_hash> s_shadow_cache;
 
 QPixmap const &cached_shadow_atlas(QColor shadow_color, qreal dpr)
@@ -168,7 +172,10 @@ QPixmap const &cached_shadow_atlas(QColor shadow_color, qreal dpr)
         return it->second;
     }
 
-    if (s_shadow_cache.size() > 16) {
+    // Evict only when the cache grows unreasonably large (e.g. many
+    // per-node shadow colors on multiple monitors).  Keep the entry
+    // we are about to insert so the next paint does not regenerate it.
+    if (s_shadow_cache.size() > 64) {
         s_shadow_cache.clear();
     }
 
@@ -304,6 +311,9 @@ void configure_text_painter(QPainter *painter, GraphicsView *view)
     painter->setFont(font);
 }
 
+// NOTE: all static caches below are accessed only from the GUI thread
+// (during QGraphicsItem::paint).  They are not thread-safe.
+
 // Paths are cached at the origin and the painter is translated to the
 // draw position.  The cache key combines QFont::key() (which encodes
 // family, size, weight, style, hinting, etc.) with the text string.
@@ -382,13 +392,13 @@ void DefaultNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo) const
         }
     }
     // Fallback: only constructed when the fast path above cannot resolve the
-    // style.  The default NodeStyle() constructor is expensive (loads SVG
-    // icons and parses JSON from resources), so it must not run on every paint.
-    NodeStyle fallbackStorage(QJsonObject{});
+    // style.  The NodeStyle constructor is expensive (loads SVG icons and
+    // parses JSON from resources), so it must not run on every paint.
+    std::optional<NodeStyle> fallbackStorage;
     if (!stylePtr) {
         QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-        fallbackStorage = NodeStyle(json.object());
-        stylePtr = &fallbackStorage;
+        fallbackStorage.emplace(json.object());
+        stylePtr = &*fallbackStorage;
     }
     NodeStyle const &style = *stylePtr;
 

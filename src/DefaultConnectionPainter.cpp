@@ -127,8 +127,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
 
     bool const selected = cgo.isSelected();
 
-        auto const cubic = cubicPath(cgo);
-        if (useGradientColor) {
+    auto const cubic = cubicPath(cgo);
+    if (useGradientColor) {
         painter->setBrush(Qt::NoBrush);
 
         QColor cOut = normalColorOut;
@@ -150,11 +150,12 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
             painter->drawLine(cgo.cachedSamplePoint(i), cgo.cachedSamplePoint(i + 1));
         }
 
-        QRectF const targetRect(cgo.cachedMidPoint().x() - _convertPixmap.width() / 2.0,
-                                cgo.cachedMidPoint().y() - _convertPixmap.height() / 2.0,
-                                _convertPixmap.width(),
-                                _convertPixmap.height());
-        painter->drawPixmap(targetRect, _convertPixmap, QRectF(_convertPixmap.rect()));
+        QPixmap const &pixmap = convertPixmap();
+        QRectF const targetRect(cgo.cachedMidPoint().x() - pixmap.width() / 2.0,
+                                cgo.cachedMidPoint().y() - pixmap.height() / 2.0,
+                                pixmap.width(),
+                                pixmap.height());
+        painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
     } else {
         p.setColor(normalColorOut);
 

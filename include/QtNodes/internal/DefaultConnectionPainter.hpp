@@ -28,7 +28,19 @@ private:
 #endif
 
 private:
-    QPixmap _convertPixmap{QIcon(QStringLiteral(":/convert.png")).pixmap(QSize(22, 22))};
+    // Lazily initialized on first use to avoid depending on Qt resource
+    // system availability at static-init / early construction time.
+    mutable QPixmap _convertPixmap;
+    mutable bool _convertPixmapInitialized = false;
+
+    QPixmap const &convertPixmap() const
+    {
+        if (Q_UNLIKELY(!_convertPixmapInitialized)) {
+            _convertPixmap = QIcon(QStringLiteral(":/convert.png")).pixmap(QSize(22, 22));
+            _convertPixmapInitialized = true;
+        }
+        return _convertPixmap;
+    }
 };
 
 } // namespace QtNodes

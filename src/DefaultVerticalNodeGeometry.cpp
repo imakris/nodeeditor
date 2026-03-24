@@ -2,7 +2,9 @@
 
 #include "AbstractGraphModel.hpp"
 #include "NodeData.hpp"
+#include "ShadowConstants.hpp"
 
+#include <algorithm>
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
@@ -27,9 +29,12 @@ QRectF DefaultVerticalNodeGeometry::boundingRect(NodeId const nodeId) const
 {
     QSize s = size(nodeId);
 
-    constexpr qreal base = 20.0;
-    constexpr qreal shadow_extra = 20.0;
-    QMarginsF margins(base, base, base + shadow_extra, base + shadow_extra);
+    // See DefaultHorizontalNodeGeometry::boundingRect() for rationale.
+    constexpr qreal portMargin = 20.0;
+    QMarginsF margins(std::max(portMargin, ShadowConstants::extentLeft),
+                      std::max(portMargin, ShadowConstants::extentTop),
+                      std::max(portMargin, ShadowConstants::extentRight),
+                      std::max(portMargin, ShadowConstants::extentBottom));
 
     QRectF r(QPointF(0, 0), s);
 

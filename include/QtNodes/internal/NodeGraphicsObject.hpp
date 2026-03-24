@@ -120,6 +120,10 @@ private:
     QGraphicsProxyWidget *_proxyWidget;
 
     std::weak_ptr<NodeGroup> _nodeGroup{};
+
+    // Transient: set only during paint(), nullptr at all other times.
+    // TODO: consider passing GraphicsView* through the paint chain or
+    // using an RAII guard to make this less fragile.
     GraphicsView *_currentGraphicsView = nullptr;
 };
 } // namespace QtNodes

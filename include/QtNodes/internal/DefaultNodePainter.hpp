@@ -17,6 +17,12 @@ class NodeGraphicsObject;
 class NodeState;
 
 /// @ Lightweight class incapsulating paint code.
+///
+/// NOTE: Several draw methods accept a GraphicsView* parameter for
+/// zoom-aware text rendering.  This couples the painter to the view,
+/// which custom AbstractNodePainter subclasses must accommodate.
+/// Consider making zoom-awareness a painter option if this coupling
+/// becomes problematic.
 class NODE_EDITOR_PUBLIC DefaultNodePainter : public AbstractNodePainter
 {
 public:

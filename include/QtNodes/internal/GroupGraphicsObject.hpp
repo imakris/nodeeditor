@@ -77,11 +77,6 @@ public:
    */
     NodeGroup const &group() const;
 
-    /**
-   * @copydoc QGraphicsItem::boundingRect()
-   */
-    QRectF boundingRect() const override;
-
     enum { Type = UserType + 3 };
 
     /**
@@ -216,9 +211,8 @@ public:
     QPen _borderPen;
 
 private:
-    QRectF compute_group_rect() const;
+    QRectF computeGroupRect() const;
 
-private:
     /**
    * @brief _scene Reference to the scene object in which this object is included.
    */

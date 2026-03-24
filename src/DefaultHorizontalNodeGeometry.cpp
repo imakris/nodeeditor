@@ -2,7 +2,9 @@
 
 #include "AbstractGraphModel.hpp"
 #include "NodeData.hpp"
+#include "ShadowConstants.hpp"
 
+#include <algorithm>
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
@@ -28,10 +30,16 @@ QRectF DefaultHorizontalNodeGeometry::boundingRect(NodeId const nodeId) const
     QSize s = size(nodeId);
 
     // Margin must accommodate port circles and the painter-based shadow.
-    // The shadow extends further to the right and bottom due to its offset.
-    constexpr qreal base = 20.0;
-    constexpr qreal shadow_extra = 20.0;
-    QMarginsF margins(base, base, base + shadow_extra, base + shadow_extra);
+    // The shadow extends asymmetrically because of its offset.
+    // NOTE: these margins are applied even when ShadowEnabled is false,
+    // causing a slight over-allocation (~12 px per side) for shadowless
+    // nodes.  Making them conditional would require querying the node
+    // style in every boundingRect() call, which is expensive.
+    constexpr qreal portMargin = 20.0;
+    QMarginsF margins(std::max(portMargin, ShadowConstants::extentLeft),
+                      std::max(portMargin, ShadowConstants::extentTop),
+                      std::max(portMargin, ShadowConstants::extentRight),
+                      std::max(portMargin, ShadowConstants::extentBottom));
 
     QRectF r(QPointF(0, 0), s);
 
