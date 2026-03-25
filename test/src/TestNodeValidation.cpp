@@ -43,10 +43,7 @@ public:
     // Expose validation methods for testing
     void setTestValidationState(NodeValidationState::State state, QString const &message)
     {
-        NodeValidationState vs;
-        vs._state = state;
-        vs._stateMessage = message;
-        setValidationState(vs);
+        setValidationState(NodeValidationState(state, message));
     }
 
     void setTestProcessingStatus(NodeProcessingStatus status) { setNodeProcessingStatus(status); }
@@ -64,9 +61,7 @@ TEST_CASE("NodeValidationState basic functionality", "[validation]")
 
     SECTION("Validation state can be set to Warning")
     {
-        NodeValidationState state;
-        state._state = NodeValidationState::State::Warning;
-        state._stateMessage = "Test warning";
+        NodeValidationState state(NodeValidationState::State::Warning, "Test warning");
 
         CHECK_FALSE(state.isValid());
         CHECK(state.state() == NodeValidationState::State::Warning);
@@ -75,9 +70,7 @@ TEST_CASE("NodeValidationState basic functionality", "[validation]")
 
     SECTION("Validation state can be set to Error")
     {
-        NodeValidationState state;
-        state._state = NodeValidationState::State::Error;
-        state._stateMessage = "Test error";
+        NodeValidationState state(NodeValidationState::State::Error, "Test error");
 
         CHECK_FALSE(state.isValid());
         CHECK(state.state() == NodeValidationState::State::Error);

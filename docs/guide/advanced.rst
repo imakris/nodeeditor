@@ -199,7 +199,7 @@ Control how many connections a port accepts:
    QVariant MyModel::portData(NodeId nodeId, PortType portType,
                                PortIndex portIndex, PortRole role) const override
    {
-       if (role == PortRole::ConnectionPolicyRole) {
+       if (role == PortRole::ConnectionPolicy) {
            if (portType == PortType::In) {
                // Inputs accept only one connection
                return QVariant::fromValue(ConnectionPolicy::One);

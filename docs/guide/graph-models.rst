@@ -89,7 +89,13 @@ Remove connections first, then the node:
            return false;
 
        // Remove all connections involving this node
-       for (auto& conn : allConnectionIds(nodeId)) {
+       std::vector<ConnectionId> attachedConnections;
+       auto const &connections = allConnectionIds(nodeId);
+       attachedConnections.reserve(connections.size());
+       for (auto const &conn : connections) {
+           attachedConnections.push_back(conn);
+       }
+       for (auto const &conn : attachedConnections) {
            deleteConnection(conn);
        }
 
@@ -183,23 +189,10 @@ Return connections filtered by node and port:
 
 .. code-block:: cpp
 
-   std::unordered_set<ConnectionId>
+   AbstractGraphModel::ConnectionIdSet const &
    MyGraphModel::connections(NodeId nodeId, PortType portType, PortIndex portIndex) const
    {
-       std::unordered_set<ConnectionId> result;
-       for (const auto& conn : _connections) {
-           if (portType == PortType::In &&
-               conn.inNodeId == nodeId &&
-               conn.inPortIndex == portIndex) {
-               result.insert(conn);
-           }
-           else if (portType == PortType::Out &&
-                    conn.outNodeId == nodeId &&
-                    conn.outPortIndex == portIndex) {
-               result.insert(conn);
-           }
-       }
-       return result;
+       return _connectionIndex.connections(nodeId, portType, portIndex);
    }
 
 **Connection Validation**
@@ -244,9 +237,16 @@ Implement ``portData()`` for port-specific information:
    * - ``DataType``
      - ``NodeDataType``
      - Type descriptor for compatibility checks
-   * - ``ConnectionPolicyRole``
+   * - ``ConnectionPolicy``
      - ``ConnectionPolicy``
      - ``One`` (single connection) or ``Many``
+
+.. note::
+
+   ``allNodeIds()``, ``allConnectionIds()``, and ``connections()`` return
+   references to storage owned by the model. Implementations must keep those
+   containers alive for the duration of the call site rather than constructing
+   and returning temporaries.
    * - ``Caption``
      - ``QString``
      - Port label text

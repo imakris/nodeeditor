@@ -222,8 +222,8 @@ void NodeGraphicsObject::updateValidationTooltip()
     QVariant var = _graphModel.nodeData(_nodeId, NodeRole::ValidationState);
     if (var.canConvert<NodeValidationState>()) {
         auto state = var.value<NodeValidationState>();
-        if (state._state != NodeValidationState::State::Valid) {
-            tooltip = state._stateMessage;
+        if (!state.isValid()) {
+            tooltip = state.message();
         }
     }
     setToolTip(tooltip);
@@ -282,7 +282,7 @@ void NodeGraphicsObject::mousePressEvent(QGraphicsSceneMouseEvent *event)
                                            .portData(_nodeId,
                                                      portToCheck,
                                                      portIndex,
-                                                     PortRole::ConnectionPolicyRole)
+                                                     PortRole::ConnectionPolicy)
                                            .value<ConnectionPolicy>();
 
                 if (!connected.empty() && outPolicy == ConnectionPolicy::One) {

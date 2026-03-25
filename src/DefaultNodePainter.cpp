@@ -416,7 +416,7 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
 
     if (var.canConvert<NodeValidationState>()) {
         auto state = var.value<NodeValidationState>();
-        switch (state._state) {
+        switch (state.state()) {
         case NodeValidationState::State::Error: {
             invalid = true;
             color = nodeStyle.ErrorColor;
@@ -706,15 +706,15 @@ void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObjec
         return;
 
     auto state = var.value<NodeValidationState>();
-    if (state._state == NodeValidationState::State::Valid)
+    if (state.isValid())
         return;
 
     QSize size = geometry.size(nodeId);
 
     QSize const iconSize(16, 16);
 
-    QColor color = (state._state == NodeValidationState::State::Error) ? nodeStyle.ErrorColor
-                                                                       : nodeStyle.WarningColor;
+    QColor color = (state.state() == NodeValidationState::State::Error) ? nodeStyle.ErrorColor
+                                                                        : nodeStyle.WarningColor;
     qreal const dpr = painter->device()
         ? painter->device()->devicePixelRatioF()
         : 1.0;

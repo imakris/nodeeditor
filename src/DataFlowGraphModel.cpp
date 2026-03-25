@@ -114,7 +114,7 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
         PortIndex const portIndex = getPortIndex(portType, connectionId);
         auto const &connected = connections(nodeId, portType, portIndex);
 
-        auto policy = portData(nodeId, portType, portIndex, PortRole::ConnectionPolicyRole)
+        auto policy = portData(nodeId, portType, portIndex, PortRole::ConnectionPolicy)
                           .value<ConnectionPolicy>();
 
         return connected.empty() || (policy == ConnectionPolicy::Many);
@@ -455,7 +455,7 @@ QVariant DataFlowGraphModel::portData(NodeId nodeId,
         result = QVariant::fromValue(model->dataType(portType, portIndex));
         break;
 
-    case PortRole::ConnectionPolicyRole:
+    case PortRole::ConnectionPolicy:
         result = QVariant::fromValue(model->portConnectionPolicy(portType, portIndex));
         break;
 

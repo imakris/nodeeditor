@@ -61,10 +61,8 @@ public:
         if (!textData || textData->isEmpty()) {
             // No input - set Empty status
             setNodeProcessingStatus(NodeProcessingStatus::Empty);
-            NodeValidationState state;
-            state._state = NodeValidationState::State::Warning;
-            state._stateMessage = "No input data";
-            setValidationState(state);
+            setValidationState(NodeValidationState(NodeValidationState::State::Warning,
+                                                   "No input data"));
 
             _outputData.reset();
             if (_label)
@@ -107,10 +105,9 @@ private:
 
         if (text.length() < _minLength) {
             // Validation failed
-            NodeValidationState state;
-            state._state = NodeValidationState::State::Error;
-            state._stateMessage = QString("Text must be at least %1 characters").arg(_minLength);
-            setValidationState(state);
+            setValidationState(NodeValidationState(
+                NodeValidationState::State::Error,
+                QString("Text must be at least %1 characters").arg(_minLength)));
 
             setNodeProcessingStatus(NodeProcessingStatus::Failed);
 
@@ -121,10 +118,8 @@ private:
             Q_EMIT dataInvalidated(0);
         } else if (text.length() < _minLength * 2) {
             // Partial success - warning
-            NodeValidationState state;
-            state._state = NodeValidationState::State::Warning;
-            state._stateMessage = "Text is short but acceptable";
-            setValidationState(state);
+            setValidationState(NodeValidationState(NodeValidationState::State::Warning,
+                                                   "Text is short but acceptable"));
 
             setNodeProcessingStatus(NodeProcessingStatus::Partial);
 
@@ -135,10 +130,7 @@ private:
             Q_EMIT dataUpdated(0);
         } else {
             // Full success
-            NodeValidationState state;
-            state._state = NodeValidationState::State::Valid;
-            state._stateMessage = "";
-            setValidationState(state);
+            setValidationState(NodeValidationState());
 
             setNodeProcessingStatus(NodeProcessingStatus::Updated);
 

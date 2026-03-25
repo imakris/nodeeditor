@@ -195,6 +195,14 @@ void restore_groups_from_json(QJsonObject const &sceneJson, QtNodes::BasicGraphi
     }
 }
 
+void load_scene_json(QJsonObject const &sceneJson,
+                     QtNodes::DataFlowGraphModel &graphModel,
+                     QtNodes::BasicGraphicsScene &scene)
+{
+    graphModel.load(sceneJson);
+    restore_groups_from_json(sceneJson, scene);
+}
+
 } // namespace
 
 namespace QtNodes {
@@ -367,19 +375,26 @@ bool DataFlowGraphicsScene::load()
         return false;
     }
 
+    DataFlowGraphModel stagingModel(_graphModel.dataModelRegistry());
+    DataFlowGraphicsScene stagingScene(stagingModel);
+
+    try {
+        load_scene_json(sceneJson, stagingModel, stagingScene);
+    } catch (...) {
+        return false;
+    }
+
     QJsonObject const previousSceneJson = scene_json_with_groups(_graphModel, *this);
 
     clearScene();
 
     try {
-        _graphModel.load(sceneJson);
-        restore_groups_from_json(sceneJson, *this);
+        load_scene_json(sceneJson, _graphModel, *this);
     } catch (...) {
         clearScene();
 
         try {
-            _graphModel.load(previousSceneJson);
-            restore_groups_from_json(previousSceneJson, *this);
+            load_scene_json(previousSceneJson, _graphModel, *this);
         } catch (...) {
             clearScene();
         }

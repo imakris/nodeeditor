@@ -171,7 +171,7 @@ QVariant SimpleGraphModel::portData(NodeId nodeId,
         return QVariant();
         break;
 
-    case PortRole::ConnectionPolicyRole:
+    case PortRole::ConnectionPolicy:
         return QVariant::fromValue(ConnectionPolicy::One);
         break;
 

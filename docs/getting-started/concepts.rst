@@ -131,7 +131,7 @@ Key roles: ``Type``, ``Position``, ``Caption``, ``InPortCount``, ``OutPortCount`
    // Get port data type
    auto type = model.portData(nodeId, PortType::In, 0, PortRole::DataType);
 
-Key roles: ``Data``, ``DataType``, ``Caption``, ``ConnectionPolicyRole``
+Key roles: ``Data``, ``DataType``, ``Caption``, ``ConnectionPolicy``
 
 See :doc:`/guide/graph-models` for the complete role reference.
 

@@ -27,10 +27,17 @@ struct NodeValidationState
         Warning = 1, ///< Some inputs are missing or questionable, processing may be unreliable.
         Error = 2,   ///< Inputs or settings are invalid, preventing successful computation.
     };
+
+    NodeValidationState(State state = State::Valid, QString message = QString())
+        : _state(state)
+        , _stateMessage(std::move(message))
+    {}
+
     bool isValid() const noexcept { return _state == State::Valid; };
     QString message() const { return _stateMessage; }
     State state() const noexcept { return _state; }
 
+private:
     State _state{State::Valid};
     QString _stateMessage{""};
 };

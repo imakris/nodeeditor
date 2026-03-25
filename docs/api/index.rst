@@ -98,7 +98,7 @@ Quick Reference
      - Type, Position, Size, Caption, CaptionVisible, Style, InternalData,
        InPortCount, OutPortCount, Widget, ValidationState, ProcessingStatus
    * - ``PortRole``
-     - Data, DataType, ConnectionPolicyRole, CaptionVisible, Caption
+     - Data, DataType, ConnectionPolicy, CaptionVisible, Caption
    * - ``NodeFlag``
      - NoFlags, Resizable, Locked
    * - ``NodeValidationState::State``
