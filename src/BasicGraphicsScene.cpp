@@ -24,6 +24,7 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
+#include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QIODevice>
 #include <QtCore/QJsonArray>
@@ -875,14 +876,12 @@ std::weak_ptr<NodeGroup> BasicGraphicsScene::loadGroupFile()
     const QJsonObject fileJson = groupDocument.object();
 
     try {
-        validate_group_json(fileJson);
-    } catch (...) {
-        return std::weak_ptr<NodeGroup>();
-    }
-
-    try {
         return restoreGroup(fileJson).first;
+    } catch (std::exception const &ex) {
+        qWarning() << "Failed to load group file:" << ex.what();
+        return std::weak_ptr<NodeGroup>();
     } catch (...) {
+        qWarning() << "Failed to load group file due to an unknown error";
         return std::weak_ptr<NodeGroup>();
     }
 }

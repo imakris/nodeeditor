@@ -4,6 +4,7 @@
 #include "SerializationValidation.hpp"
 
 #include <QJsonObject>
+#include <QtCore/QtGlobal>
 
 #include <iostream>
 #include <string>
@@ -128,18 +129,6 @@ inline QJsonObject toJson(ConnectionId const &connId)
     return connJson;
 }
 
-inline ConnectionId fromJson(QJsonObject const &connJson)
-{
-    ConnectionId connId{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
-
-    detail::read_node_id(connJson["outNodeId"], connId.outNodeId);
-    detail::read_port_index(connJson["outPortIndex"], connId.outPortIndex);
-    detail::read_node_id(connJson["inNodeId"], connId.inNodeId);
-    detail::read_port_index(connJson["inPortIndex"], connId.inPortIndex);
-
-    return connId;
-}
-
 inline bool tryFromJson(QJsonObject const &connJson, ConnectionId &connId)
 {
     NodeId outNodeId = InvalidNodeId;
@@ -156,6 +145,16 @@ inline bool tryFromJson(QJsonObject const &connJson, ConnectionId &connId)
 
     connId = ConnectionId{outNodeId, outPortIndex, inNodeId, inPortIndex};
     return true;
+}
+
+inline ConnectionId fromJson(QJsonObject const &connJson)
+{
+    ConnectionId connId{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
+
+    bool const ok = tryFromJson(connJson, connId);
+    Q_ASSERT(ok);
+
+    return connId;
 }
 
 inline NodeRole portCountRole(PortType portType)

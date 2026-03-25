@@ -88,7 +88,9 @@ AbstractGraphModel &ConnectionGraphicsObject::graphModel() const
 
 BasicGraphicsScene *ConnectionGraphicsObject::nodeScene() const
 {
-    return dynamic_cast<BasicGraphicsScene *>(scene());
+    auto *sceneObject = dynamic_cast<BasicGraphicsScene *>(scene());
+    Q_ASSERT(sceneObject != nullptr);
+    return sceneObject;
 }
 
 ConnectionId const &ConnectionGraphicsObject::connectionId() const

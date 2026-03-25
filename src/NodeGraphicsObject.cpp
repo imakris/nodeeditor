@@ -125,7 +125,9 @@ AbstractGraphModel &NodeGraphicsObject::graphModel() const
 
 BasicGraphicsScene *NodeGraphicsObject::nodeScene() const
 {
-    return dynamic_cast<BasicGraphicsScene *>(scene());
+    auto *sceneObject = dynamic_cast<BasicGraphicsScene *>(scene());
+    Q_ASSERT(sceneObject != nullptr);
+    return sceneObject;
 }
 
 void NodeGraphicsObject::updateQWidgetEmbedPos()
