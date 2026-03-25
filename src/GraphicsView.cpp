@@ -37,6 +37,13 @@ constexpr double zoom_per_notch = 1.05;
 constexpr int zoom_timer_interval_ms = 16;
 constexpr double zoom_velocity_epsilon = 0.001;
 
+double zoom_base_k()
+{
+    static double const value = std::pow(zoom_per_notch,
+                                         (1.0 - zoom_friction) / zoom_impulse_per_step);
+    return value;
+}
+
 QPointF map_to_scene_exact(QGraphicsView const &view, QPointF const &viewPoint)
 {
     bool invertible = false;
@@ -353,6 +360,10 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
     _zoomPivot = event->position();
 
     if (_zoomTimerId == 0 && std::abs(_zoomVelocity) >= zoom_velocity_epsilon) {
+        // Seed the timestamp one reference interval in the past so the immediate
+        // applyZoomStep() call below sees dt ≈ 1.0 and applies a full first step.
+        _lastZoomStepTime = std::chrono::steady_clock::now()
+                          - std::chrono::milliseconds(zoom_timer_interval_ms);
         _zoomTimerId = startTimer(zoom_timer_interval_ms);
         refresh_node_cache_mode(scene(), true);
     }
@@ -371,6 +382,29 @@ void GraphicsView::timerEvent(QTimerEvent *event)
     }
 }
 
+double GraphicsView::zoomAnimationScaleFactor(double velocity, double elapsedTimerSteps)
+{
+    if (elapsedTimerSteps <= 0.0 || std::abs(velocity) < zoom_velocity_epsilon) {
+        return 1.0;
+    }
+
+    double const velocityDecay = std::pow(zoom_friction, elapsedTimerSteps);
+    double const integratedVelocity = std::abs(1.0 - zoom_friction) > 1e-12
+        ? velocity * (1.0 - velocityDecay) / (1.0 - zoom_friction)
+        : velocity * elapsedTimerSteps;
+
+    return std::pow(zoom_base_k(), integratedVelocity);
+}
+
+double GraphicsView::zoomAnimationVelocityAfter(double velocity, double elapsedTimerSteps)
+{
+    if (elapsedTimerSteps <= 0.0 || std::abs(velocity) < zoom_velocity_epsilon) {
+        return velocity;
+    }
+
+    return velocity * std::pow(zoom_friction, elapsedTimerSteps);
+}
+
 void GraphicsView::applyZoomStep()
 {
     if (std::abs(_zoomVelocity) < zoom_velocity_epsilon) {
@@ -378,9 +412,16 @@ void GraphicsView::applyZoomStep()
         return;
     }
 
-    static double const base_k = std::pow(zoom_per_notch,
-                                          (1.0 - zoom_friction) / zoom_impulse_per_step);
-    double const factor = std::pow(base_k, _zoomVelocity);
+    auto now = std::chrono::steady_clock::now();
+    double elapsed_ms = std::chrono::duration<double, std::milli>(now - _lastZoomStepTime).count();
+    _lastZoomStepTime = now;
+
+    if (elapsed_ms <= 0.0) {
+        elapsed_ms = zoom_timer_interval_ms;
+    }
+
+    double const dt = elapsed_ms / zoom_timer_interval_ms;
+    double const factor = zoomAnimationScaleFactor(_zoomVelocity, dt);
     double const current_scale = transform().m11();
     double const new_scale = current_scale * factor;
 
@@ -396,7 +437,7 @@ void GraphicsView::applyZoomStep()
     }
 
     applyZoomFactor(factor);
-    _zoomVelocity *= zoom_friction;
+    _zoomVelocity = zoomAnimationVelocityAfter(_zoomVelocity, dt);
 }
 
 void GraphicsView::applyZoomFactor(double factor)

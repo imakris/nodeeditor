@@ -12,6 +12,8 @@
 #include <QApplication>
 #include <QWheelEvent>
 
+#include <vector>
+
 using QtNodes::BasicGraphicsScene;
 using QtNodes::GraphicsView;
 using QtNodes::NodeId;
@@ -114,6 +116,34 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
 
         CHECK(view.transform().dx() == Approx(0.0).margin(0.01));
         CHECK(view.transform().dy() == Approx(0.0).margin(0.01));
+    }
+
+    SECTION("Smooth wheel zoom math is invariant to timer cadence")
+    {
+        struct Zoom_state
+        {
+            double scale = 1.0;
+            double velocity = 0.0;
+        };
+
+        auto advanceZoom = [](double initialVelocity, std::vector<double> const &elapsedSteps) {
+            Zoom_state state{1.0, initialVelocity};
+            for (double const elapsedStep : elapsedSteps) {
+                state.scale *= GraphicsView::zoomAnimationScaleFactor(state.velocity, elapsedStep);
+                state.velocity = GraphicsView::zoomAnimationVelocityAfter(state.velocity, elapsedStep);
+            }
+            return state;
+        };
+
+        Zoom_state const singleGap = advanceZoom(4.0, {10.0});
+        Zoom_state const splitGap = advanceZoom(4.0, {4.0, 6.0});
+        Zoom_state const fineSteps = advanceZoom(4.0, {1.0, 1.0, 1.0, 1.0, 1.0,
+                                                       1.0, 1.0, 1.0, 1.0, 1.0});
+
+        CHECK(singleGap.scale == Approx(splitGap.scale).epsilon(1e-10));
+        CHECK(singleGap.velocity == Approx(splitGap.velocity).epsilon(1e-10));
+        CHECK(singleGap.scale == Approx(fineSteps.scale).epsilon(1e-10));
+        CHECK(singleGap.velocity == Approx(fineSteps.velocity).epsilon(1e-10));
     }
 }
 
