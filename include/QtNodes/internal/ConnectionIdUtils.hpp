@@ -11,7 +11,8 @@
 
 namespace QtNodes {
 
-inline NodeId getNodeId(PortType portType, ConnectionId const &connectionId)
+/// Extracts the NodeId from a ConnectionId on the given port side.
+inline NodeId connectionNodeId(PortType portType, ConnectionId const &connectionId)
 {
     NodeId id = InvalidNodeId;
 
@@ -24,7 +25,8 @@ inline NodeId getNodeId(PortType portType, ConnectionId const &connectionId)
     return id;
 }
 
-inline PortIndex getPortIndex(PortType portType, ConnectionId const &connectionId)
+/// Extracts the PortIndex from a ConnectionId on the given port side.
+inline PortIndex connectionPortIndex(PortType portType, ConnectionId const &connectionId)
 {
     PortIndex index = InvalidPortIndex;
 

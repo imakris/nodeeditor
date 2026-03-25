@@ -29,9 +29,6 @@ public:
     using NodeIdSet = std::unordered_set<NodeId>;
     using ConnectionIdSet = std::unordered_set<ConnectionId>;
 
-    /// Generates a new unique NodeId.
-    [[nodiscard]] virtual NodeId newNodeId() = 0;
-
     /// @brief Returns the full set of unique Node Ids.
     /**
      * Model creator is responsible for generating unique `unsigned int`
@@ -258,7 +255,19 @@ Q_SIGNALS:
 
     void modelReset();
 
+protected:
+    /// Generates a new unique NodeId.
+    /**
+     * This is an internal operation used by the model to mint fresh
+     * identifiers for new nodes.  Each call must return a value that
+     * has never been returned before (for this model instance).
+     */
+    [[nodiscard]] virtual NodeId newNodeId() = 0;
+
 private:
+    friend class BasicGraphicsScene;
+    friend class PasteCommand;
+
     std::vector<ConnectionId> _shiftedByDynamicPortsConnections;
 };
 
