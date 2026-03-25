@@ -353,15 +353,6 @@ std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2() const
     throw std::logic_error("Unreachable code after switch statement");
 }
 
-void ConnectionGraphicsObject::addGraphicsEffect()
-{
-    auto effect = new QGraphicsBlurEffect;
-
-    effect->setBlurRadius(5);
-    setGraphicsEffect(effect);
-
-}
-
 std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2Horizontal() const
 {
     double const defaultOffset = 200;

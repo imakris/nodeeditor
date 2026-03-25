@@ -5,7 +5,6 @@
 #include "NodeGraphicsObject.hpp"
 
 #include <QtCore/QDebug>
-#include <QtCore/QPointF>
 
 
 namespace QtNodes {

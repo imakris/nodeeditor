@@ -5,11 +5,9 @@
 #include "NodeState.hpp"
 #include <QIcon>
 #include <QRectF>
-#include <QtCore/QUuid>
 #include <QtWidgets/QGraphicsObject>
 
 #include "Export.hpp"
-#include "NodeState.hpp"
 
 class QGraphicsProxyWidget;
 
@@ -19,7 +17,6 @@ class BasicGraphicsScene;
 class AbstractGraphModel;
 class GraphicsView;
 class NodeGroup;
-class NodeDelegateModel;
 class GroupGraphicsObject;
 
 class NODE_EDITOR_PUBLIC NodeGraphicsObject : public QGraphicsObject

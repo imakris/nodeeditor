@@ -4,21 +4,13 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QObject>
 
-#include "DataFlowGraphModel.hpp"
 #include "Definitions.hpp"
 #include "Export.hpp"
 #include "GroupGraphicsObject.hpp"
-#include "NodeConnectionInteraction.hpp"
-#include "NodeState.hpp"
 
 namespace QtNodes {
 
-class DataFlowGraphModel;
-class GroupGraphicsObject;
-class NodeState;
-class NodeConnectionInteraction;
 class NodeGraphicsObject;
-struct ConnectionId;
 
 /**
  * @brief The NodeGroup class defines a controller for node groups. It is

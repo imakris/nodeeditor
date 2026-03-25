@@ -1,10 +1,8 @@
 #pragma once
 
 #include "BasicGraphicsScene.hpp"
-#include "ConnectionGraphicsObject.hpp"
 #include "DataFlowGraphModel.hpp"
 #include "Export.hpp"
-#include "NodeConnectionInteraction.hpp"
 
 namespace QtNodes {
 

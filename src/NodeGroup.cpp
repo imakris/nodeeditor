@@ -1,14 +1,11 @@
 #include "NodeGroup.hpp"
 #include "ConnectionIdUtils.hpp"
-#include "NodeConnectionInteraction.hpp"
 #include <QJsonArray>
 #include <QJsonDocument>
 
 #include <utility>
 
-using QtNodes::DataFlowGraphModel;
 using QtNodes::GroupGraphicsObject;
-using QtNodes::NodeConnectionInteraction;
 using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeGroup;
 using QtNodes::NodeId;

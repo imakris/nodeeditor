@@ -104,28 +104,6 @@ bool NodeConnectionInteraction::disconnect(PortType portToDisconnect) const
     return true;
 }
 
-// ------------------ util functions below
-
-PortType NodeConnectionInteraction::connectionRequiredPort() const
-{
-    auto const &state = _cgo.connectionState();
-
-    return state.requiredPort();
-}
-
-QPointF NodeConnectionInteraction::nodePortScenePosition(PortType portType,
-                                                         PortIndex portIndex) const
-{
-    AbstractNodeGeometry &geometry = _scene.nodeGeometry();
-
-    QPointF p = geometry.portScenePosition(_ngo.nodeId(),
-                                           portType,
-                                           portIndex,
-                                           _ngo.sceneTransform());
-
-    return p;
-}
-
 PortIndex NodeConnectionInteraction::nodePortIndexUnderScenePoint(PortType portType,
                                                                   QPointF const &scenePoint) const
 {

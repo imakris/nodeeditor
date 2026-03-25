@@ -4,12 +4,9 @@
 
 #include "Export.hpp"
 
-class QPainter;
-
 namespace QtNodes {
 
 class NodeGraphicsObject;
-class NodeDataModel;
 
 /// Class enables custom painting.
 class NODE_EDITOR_PUBLIC AbstractNodePainter

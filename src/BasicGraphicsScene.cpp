@@ -33,7 +33,6 @@
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 
-#include <iostream>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>

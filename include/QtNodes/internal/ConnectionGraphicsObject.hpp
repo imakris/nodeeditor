@@ -90,8 +90,6 @@ protected:
 private:
     void initializePosition();
 
-    void addGraphicsEffect();
-
     std::pair<QPointF, QPointF> pointsC1C2Horizontal() const;
 
     std::pair<QPointF, QPointF> pointsC1C2Vertical() const;

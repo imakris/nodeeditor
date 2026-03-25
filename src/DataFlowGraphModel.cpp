@@ -436,8 +436,6 @@ bool DataFlowGraphModel::setPortData(
 {
     Q_UNUSED(nodeId);
 
-    QVariant result;
-
     auto it = _models.find(nodeId);
     if (it == _models.end())
         return false;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QtGui/QIcon>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QPixmap>
@@ -10,7 +9,6 @@
 
 namespace QtNodes {
 
-class ConnectionGeometry;
 class ConnectionGraphicsObject;
 
 class DefaultConnectionPainter : public AbstractConnectionPainter

@@ -1,12 +1,8 @@
 #pragma once
 
-#include <QtCore/QUuid>
-
 #include "Export.hpp"
 
 #include "Definitions.hpp"
-
-class QPointF;
 
 namespace QtNodes {
 
