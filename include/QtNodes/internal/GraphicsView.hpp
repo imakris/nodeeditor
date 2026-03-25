@@ -129,7 +129,7 @@ private:
     void applyZoomStep();
     void applyZoomFactor(double factor);
     void stopZoomTimer();
-    void apply_rasterization_policy();
+    void applyRasterizationPolicy();
 
     double _zoomVelocity = 0.0;
     QPointF _zoomPivot;

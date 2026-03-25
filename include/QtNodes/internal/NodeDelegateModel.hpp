@@ -1,8 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
 #include <QMetaType>
+#include <QImage>
 #include <QPixmap>
 #include <QtGui/QColor>
 #include <QtWidgets/QWidget>
@@ -109,7 +111,8 @@ public:
     /// Convenience helper to change the node background color.
     void setBackgroundColor(QColor const &color);
 
-    QPixmap processingStatusIcon() const;
+    QImage processingStatusImage(qreal dpr) const;
+    ProcessingIconStyle processingIconStyle() const;
 
     void setStatusIcon(NodeProcessingStatus status, const QPixmap &pixmap);
 
@@ -200,7 +203,9 @@ private:
     mutable bool _processingStatusIconDirty{true};
     mutable NodeProcessingStatus _cachedProcessingStatus{NodeProcessingStatus::NoStatus};
     mutable int _cachedProcessingStatusResolution{0};
-    mutable QPixmap _cachedProcessingStatusIcon;
+    mutable qreal _cachedProcessingStatusDpr{0.0};
+    mutable QImage _cachedProcessingStatusImage;
+    mutable std::mutex _processingStatusIconMutex;
 };
 
 } // namespace QtNodes

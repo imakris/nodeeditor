@@ -76,12 +76,7 @@ NodeGroup const &GroupGraphicsObject::group() const
     return _group;
 }
 
-QRectF GroupGraphicsObject::boundingRect() const
-{
-    return QGraphicsRectItem::boundingRect();
-}
-
-QRectF GroupGraphicsObject::compute_group_rect() const
+QRectF GroupGraphicsObject::computeGroupRect() const
 {
     QRectF ret{};
     for (auto &node : _group.childNodes()) {
@@ -215,7 +210,7 @@ void GroupGraphicsObject::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 
 void GroupGraphicsObject::updateGroupGeometry()
 {
-    QRectF const newRect = compute_group_rect();
+    QRectF const newRect = computeGroupRect();
     if (newRect != rect()) {
         prepareGeometryChange();
         setRect(newRect);

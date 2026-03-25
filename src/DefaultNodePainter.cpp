@@ -7,6 +7,7 @@
 #include "ConnectionIdUtils.hpp"
 #include "DataFlowGraphModel.hpp"
 #include "GraphicsView.hpp"
+#include "NodeRenderingUtils.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
 #include "NodeState.hpp"
@@ -18,39 +19,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace QtNodes {
 
 namespace {
-
-// ============================================================================
-// 9-slice shadow atlas
-// ============================================================================
-
-// Fixed geometry for the shadow.
-constexpr double k_shadow_offset_x = 2.0;
-constexpr double k_shadow_offset_y = 2.0;
-constexpr double k_node_radius     = 3.0;
-// Box blur: radius per pass, number of passes.  3 passes of radius 5
-// approximate a gaussian with sigma ~5.
-constexpr int    k_blur_radius     = 5;
-constexpr int    k_blur_passes     = 3;
-// The 9-slice margin must cover the FULL blur transition: both the
-// outer decay to zero AND the inward ramp from the shape edge up to
-// the plateau.  With 3 passes of radius 5 the effective spread is
-// ~15px in each direction.  The tile boundary is placed at
-// (outer + inner) from the atlas edge, i.e. well inside the plateau.
-constexpr int    k_outer_margin    = 18;  // outer decay to zero
-constexpr int    k_inner_margin    = 16;  // inward ramp to plateau
-constexpr int    k_shadow_margin   = k_outer_margin + k_inner_margin;
-// Interior body: must be large relative to the blur spread so the
-// plateau reaches near-full alpha after blur.  With ~15px spread,
-// a 64px body ensures the center is well above the blur threshold.
-constexpr int    k_body_size       = 64;
-constexpr int    k_atlas_size      = k_body_size + 2 * k_shadow_margin;
-// Global shadow opacity (0-255) applied after blur.
-constexpr int    k_shadow_opacity  = 210;
 
 void box_blur_alpha(QImage &img, int radius)
 {
@@ -97,9 +72,9 @@ void box_blur_alpha(QImage &img, int radius)
     }
 }
 
-QPixmap generate_shadow_atlas(QColor shadow_color, qreal dpr)
+QImage generate_shadow_atlas(QColor shadow_color, qreal dpr)
 {
-    const int phys = static_cast<int>(std::ceil(k_atlas_size * dpr));
+    const int phys = static_cast<int>(std::ceil(node_rendering::k_atlas_size * dpr));
 
     QImage img(phys, phys, QImage::Format_ARGB32_Premultiplied);
     img.setDevicePixelRatio(dpr);
@@ -111,29 +86,37 @@ QPixmap generate_shadow_atlas(QColor shadow_color, qreal dpr)
         p.setRenderHint(QPainter::Antialiasing, true);
         p.setPen(Qt::NoPen);
         p.setBrush(Qt::white);
-        QRectF body(k_shadow_margin, k_shadow_margin, k_body_size, k_body_size);
-        p.drawRoundedRect(body, k_node_radius, k_node_radius);
+        QRectF body(node_rendering::k_shadow_margin,
+                    node_rendering::k_shadow_margin,
+                    node_rendering::k_body_size,
+                    node_rendering::k_body_size);
+        p.drawRoundedRect(body, node_rendering::k_node_radius, node_rendering::k_node_radius);
     }
 
     // Multi-pass box blur on the alpha channel.
-    const int phys_blur = std::max(1, static_cast<int>(std::round(k_blur_radius * dpr)));
-    for (int pass = 0; pass < k_blur_passes; ++pass) {
+    const int phys_blur = std::max(
+        1,
+        static_cast<int>(std::round(node_rendering::k_blur_radius * dpr)));
+    for (int pass = 0; pass < node_rendering::k_blur_passes; ++pass) {
         box_blur_alpha(img, phys_blur);
     }
 
-    // Tint with shadow color and scale alpha by shadow opacity.
+    // Tint with shadow color while preserving the style alpha and applying the
+    // configured global strength multiplier.
     const int sr = shadow_color.red();
     const int sg = shadow_color.green();
     const int sb = shadow_color.blue();
+    const int sa = shadow_color.alpha();
     for (int y = 0; y < phys; ++y) {
         auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
         for (int x = 0; x < phys; ++x) {
-            const int a = (qAlpha(line[x]) * k_shadow_opacity) / 255;
+            const int blurred_alpha = (qAlpha(line[x]) * sa) / 255;
+            const int a = (blurred_alpha * node_rendering::k_shadow_opacity) / 255;
             line[x] = qPremultiply(qRgba(sr, sg, sb, a));
         }
     }
 
-    return QPixmap::fromImage(std::move(img));
+    return img;
 }
 
 struct Shadow_cache_key
@@ -157,10 +140,13 @@ struct Shadow_cache_key_hash
     }
 };
 
-std::unordered_map<Shadow_cache_key, QPixmap, Shadow_cache_key_hash> s_shadow_cache;
+std::unordered_map<Shadow_cache_key, QImage, Shadow_cache_key_hash> s_shadow_cache;
+std::mutex s_shadow_cache_mutex;
 
-QPixmap const &cached_shadow_atlas(QColor shadow_color, qreal dpr)
+QImage cached_shadow_atlas(QColor shadow_color, qreal dpr)
 {
+    std::lock_guard<std::mutex> lock(s_shadow_cache_mutex);
+
     Shadow_cache_key key{shadow_color.rgba(),
                          static_cast<int>(dpr * 1000000.0)};
     auto it = s_shadow_cache.find(key);
@@ -168,8 +154,9 @@ QPixmap const &cached_shadow_atlas(QColor shadow_color, qreal dpr)
         return it->second;
     }
 
-    if (s_shadow_cache.size() > 16) {
-        s_shadow_cache.clear();
+    if (s_shadow_cache.size() >= 32) {
+        // Arbitrary eviction is sufficient here; the cache is tiny.
+        s_shadow_cache.erase(s_shadow_cache.begin());
     }
 
     return s_shadow_cache.emplace(key, generate_shadow_atlas(shadow_color, dpr))
@@ -182,20 +169,20 @@ void draw_nine_slice_shadow(
     QRectF const &node_rect)
 {
     const qreal dpr = painter->device()
-        ? static_cast<qreal>(painter->device()->devicePixelRatio())
+        ? painter->device()->devicePixelRatioF()
         : 1.0;
-    QPixmap const &atlas = cached_shadow_atlas(shadow_color, dpr);
+    QImage const atlas = cached_shadow_atlas(shadow_color, dpr);
     if (atlas.isNull()) {
         return;
     }
 
     // Margin in logical coords — covers the full blur transition
     // (outer falloff + inward ramp to plateau).
-    const qreal m = k_shadow_margin;
+    const qreal m = node_rendering::k_shadow_margin;
 
     // Destination rect: node rect shifted by shadow offset, expanded by margin.
-    const qreal dx = node_rect.x() + k_shadow_offset_x - m;
-    const qreal dy = node_rect.y() + k_shadow_offset_y - m;
+    const qreal dx = node_rect.x() + node_rendering::k_shadow_offset_x - m;
+    const qreal dy = node_rect.y() + node_rendering::k_shadow_offset_y - m;
     const qreal dw = node_rect.width()  + 2.0 * m;
     const qreal dh = node_rect.height() + 2.0 * m;
     const qreal inner_w = dw - 2.0 * m;
@@ -207,7 +194,7 @@ void draw_nine_slice_shadow(
 
     // Source margin/body in logical atlas coords (atlas has DPR set).
     const qreal sm = m;                          // source margin
-    const qreal sb = static_cast<qreal>(k_body_size);  // source body
+    const qreal sb = static_cast<qreal>(node_rendering::k_body_size);  // source body
 
     // Snap target rects to device pixels to prevent hairline gaps.
     QTransform const &dt = painter->deviceTransform();
@@ -236,15 +223,15 @@ void draw_nine_slice_shadow(
     const QRectF s_br(sm + sb,  sm + sb,  sm, sm);
 
     // 9 target rects (snapped to device pixels).
-    painter->drawPixmap(snap(dx,                dy,                m,       m),       atlas, s_tl);
-    painter->drawPixmap(snap(dx + m,            dy,                inner_w, m),       atlas, s_tc);
-    painter->drawPixmap(snap(dx + m + inner_w,  dy,                m,       m),       atlas, s_tr);
-    painter->drawPixmap(snap(dx,                dy + m,            m,       inner_h), atlas, s_ml);
-    painter->drawPixmap(snap(dx + m,            dy + m,            inner_w, inner_h), atlas, s_mc);
-    painter->drawPixmap(snap(dx + m + inner_w,  dy + m,            m,       inner_h), atlas, s_mr);
-    painter->drawPixmap(snap(dx,                dy + m + inner_h,  m,       m),       atlas, s_bl);
-    painter->drawPixmap(snap(dx + m,            dy + m + inner_h,  inner_w, m),       atlas, s_bc);
-    painter->drawPixmap(snap(dx + m + inner_w,  dy + m + inner_h,  m,       m),       atlas, s_br);
+    painter->drawImage(snap(dx,                dy,                m,       m),       atlas, s_tl);
+    painter->drawImage(snap(dx + m,            dy,                inner_w, m),       atlas, s_tc);
+    painter->drawImage(snap(dx + m + inner_w,  dy,                m,       m),       atlas, s_tr);
+    painter->drawImage(snap(dx,                dy + m,            m,       inner_h), atlas, s_ml);
+    painter->drawImage(snap(dx + m,            dy + m,            inner_w, inner_h), atlas, s_mc);
+    painter->drawImage(snap(dx + m + inner_w,  dy + m,            m,       inner_h), atlas, s_mr);
+    painter->drawImage(snap(dx,                dy + m + inner_h,  m,       m),       atlas, s_bl);
+    painter->drawImage(snap(dx + m,            dy + m + inner_h,  inner_w, m),       atlas, s_bc);
+    painter->drawImage(snap(dx + m + inner_w,  dy + m + inner_h,  m,       m),       atlas, s_br);
 }
 
 // ============================================================================
@@ -309,23 +296,36 @@ void configure_text_painter(QPainter *painter, GraphicsView *view)
 // family, size, weight, style, hinting, etc.) with the text string.
 // For typical node scenes the cache holds ~15 entries and never evicts.
 QHash<QString, QPainterPath> s_text_path_cache;
-QHash<QRgb, QPixmap> s_validation_icon_cache;
+std::mutex s_text_path_cache_mutex;
+std::unordered_map<Shadow_cache_key, QImage, Shadow_cache_key_hash> s_validation_icon_cache;
+std::mutex s_validation_icon_cache_mutex;
 
-QPixmap validation_icon(QIcon const &icon, QColor const &color)
+QImage validation_icon(QIcon const &icon, QColor const &color, qreal dpr)
 {
-    auto it = s_validation_icon_cache.constFind(color.rgba());
-    if (it != s_validation_icon_cache.constEnd()) {
-        return *it;
+    std::lock_guard<std::mutex> lock(s_validation_icon_cache_mutex);
+
+    Shadow_cache_key key{color.rgba(),
+                         static_cast<int>(dpr * 1000000.0)};
+    auto it = s_validation_icon_cache.find(key);
+    if (it != s_validation_icon_cache.end()) {
+        return it->second;
     }
 
-    QPixmap pixmap = icon.pixmap(QSize(16, 16));
+    QImage image = node_rendering::render_icon_image(icon, QSize(16, 16), dpr);
+    if (image.isNull()) {
+        return image;
+    }
 
-    QPainter imgPainter(&pixmap);
+    QPainter imgPainter(&image);
     imgPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    imgPainter.fillRect(pixmap.rect(), color);
+    imgPainter.fillRect(QRect(QPoint(0, 0), QSize(16, 16)), color);
     imgPainter.end();
 
-    return s_validation_icon_cache.insert(color.rgba(), std::move(pixmap)).value();
+    if (s_validation_icon_cache.size() >= 32) {
+        s_validation_icon_cache.erase(s_validation_icon_cache.begin());
+    }
+
+    return s_validation_icon_cache.emplace(key, std::move(image)).first->second;
 }
 
 void draw_text(
@@ -338,24 +338,29 @@ void draw_text(
 {
     if (should_draw_text_as_path(view)) {
         QString const key = font.key() + text;
+        QPainterPath path;
 
-        auto it = s_text_path_cache.constFind(key);
-        if (it == s_text_path_cache.constEnd()) {
-            QPainterPath path;
-            path.addText(QPointF(0, 0), font, text);
-            it = s_text_path_cache.insert(key, std::move(path));
+        {
+            std::lock_guard<std::mutex> lock(s_text_path_cache_mutex);
 
-            // Prevent unbounded growth for highly dynamic scenes.
-            if (s_text_path_cache.size() > 500) {
-                QPainterPath keep = *it;
-                s_text_path_cache.clear();
-                it = s_text_path_cache.insert(key, std::move(keep));
+            auto it = s_text_path_cache.constFind(key);
+            if (it == s_text_path_cache.constEnd()) {
+                if (s_text_path_cache.size() >= 500) {
+                    // Arbitrary eviction keeps insertion cost predictable without LRU bookkeeping.
+                    s_text_path_cache.erase(s_text_path_cache.begin());
+                }
+
+                QPainterPath new_path;
+                new_path.addText(QPointF(0, 0), font, text);
+                it = s_text_path_cache.insert(key, std::move(new_path));
             }
+
+            path = *it;
         }
 
         painter->setPen(Qt::NoPen);
         painter->translate(position);
-        painter->fillPath(*it, color);
+        painter->fillPath(path, color);
         painter->translate(-position);
         return;
     }
@@ -373,24 +378,8 @@ void DefaultNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo) const
     NodeId const nodeId = ngo.nodeId();
     GraphicsView *view = graphics_view(ngo);
 
-    // Fast path: get NodeStyle directly from the delegate model, avoiding
-    // the NodeStyle -> JSON -> QVariant -> JSON -> NodeStyle round-trip.
-    NodeStyle const *stylePtr = nullptr;
-    if (auto *dfModel = dynamic_cast<DataFlowGraphModel *>(&model)) {
-        if (auto *delegate = dfModel->delegateModel<NodeDelegateModel>(nodeId)) {
-            stylePtr = &delegate->nodeStyle();
-        }
-    }
-    // Fallback: only constructed when the fast path above cannot resolve the
-    // style.  The default NodeStyle() constructor is expensive (loads SVG
-    // icons and parses JSON from resources), so it must not run on every paint.
-    NodeStyle fallbackStorage(QJsonObject{});
-    if (!stylePtr) {
-        QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
-        fallbackStorage = NodeStyle(json.object());
-        stylePtr = &fallbackStorage;
-    }
-    NodeStyle const &style = *stylePtr;
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &style = node_rendering::resolved_node_style(model, nodeId, fallback_style);
 
     drawNodeRect(painter, ngo, style);
 
@@ -680,19 +669,18 @@ void DefaultNodePainter::drawProcessingIndicator(QPainter *painter, NodeGraphics
     if (!delegate)
         return;
 
-    // Skip if status is NoStatus
-    if (delegate->processingStatus() == NodeProcessingStatus::NoStatus)
-        return;
-
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
     QSize size = geometry.size(nodeId);
 
-    QPixmap pixmap = delegate->processingStatusIcon();
-    if (pixmap.isNull())
+    qreal const dpr = painter->device()
+        ? painter->device()->devicePixelRatioF()
+        : 1.0;
+    QImage const image = delegate->processingStatusImage(dpr);
+    if (image.isNull())
         return;
 
-    ProcessingIconStyle const &iconStyle = delegate->nodeStyle().processingIconStyle;
+    ProcessingIconStyle const iconStyle = delegate->processingIconStyle();
 
     qreal iconSize = iconStyle._size;
     qreal margin = iconStyle._margin;
@@ -710,7 +698,11 @@ void DefaultNodePainter::drawProcessingIndicator(QPainter *painter, NodeGraphics
     }
 
     QRectF const targetRect(x, size.height() - iconSize - margin, iconSize, iconSize);
-    painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
+    qreal const image_dpr = image.devicePixelRatio();
+    QRectF const sourceRect(QPointF(0, 0),
+                            QSizeF(image.width() / image_dpr,
+                                   image.height() / image_dpr));
+    painter->drawImage(targetRect, image, sourceRect);
 }
 
 void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
@@ -733,7 +725,13 @@ void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObjec
 
     QColor color = (state._state == NodeValidationState::State::Error) ? nodeStyle.ErrorColor
                                                                        : nodeStyle.WarningColor;
-    QPixmap const pixmap = validation_icon(_toolTipIcon, color);
+    qreal const dpr = painter->device()
+        ? painter->device()->devicePixelRatioF()
+        : 1.0;
+    QImage const image = validation_icon(_toolTipIcon, color, dpr);
+    if (image.isNull()) {
+        return;
+    }
 
     QPointF center(size.width(), 0.0);
     center += QPointF(iconSize.width() / 2.0, -iconSize.height() / 2.0);
@@ -742,7 +740,7 @@ void DefaultNodePainter::drawValidationIcon(QPainter *painter, NodeGraphicsObjec
                             center.y() - iconSize.height() / 2.0,
                             iconSize.width(),
                             iconSize.height());
-    painter->drawPixmap(targetRect, pixmap, QRectF(pixmap.rect()));
+    painter->drawImage(targetRect, image, QRectF(QPointF(0, 0), QSizeF(iconSize)));
 }
 
 } // namespace QtNodes

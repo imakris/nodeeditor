@@ -2,16 +2,39 @@
 #include "TestGraphModel.hpp"
 
 #include <QtNodes/BasicGraphicsScene>
+#include <QtNodes/internal/NodeGraphicsObject.hpp>
+#include <QtNodes/internal/NodeRenderingUtils.hpp>
+#include <QtNodes/internal/StyleCollection.hpp>
 
 #include <catch2/catch.hpp>
 
 #include <QGraphicsView>
+#include <QJsonObject>
+#include <QVariantMap>
 #include <QUndoStack>
 
 using QtNodes::BasicGraphicsScene;
 using QtNodes::ConnectionId;
 using QtNodes::NodeId;
 using QtNodes::NodeRole;
+
+namespace {
+
+QVariantMap shadow_enabled_style()
+{
+    return QtNodes::StyleCollection::nodeStyle().toJson().toVariantMap();
+}
+
+QVariantMap shadow_disabled_style()
+{
+    QVariantMap style = shadow_enabled_style();
+    QVariantMap nodeStyle = style["NodeStyle"].toMap();
+    nodeStyle["ShadowEnabled"] = false;
+    style["NodeStyle"] = nodeStyle;
+    return style;
+}
+
+} // namespace
 
 TEST_CASE("BasicGraphicsScene functionality", "[graphics]")
 {
@@ -90,6 +113,17 @@ TEST_CASE("BasicGraphicsScene functionality", "[graphics]")
         
         // Don't call view.show() to avoid potential graphics system issues
     }
+
+    SECTION("Nodes without explicit style fall back to collection defaults")
+    {
+        NodeId const nodeId = model.addNode("TestNode");
+        QCoreApplication::processEvents();
+
+        auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+        REQUIRE(nodeGraphics != nullptr);
+
+        CHECK(nodeGraphics->opacity() == Approx(QtNodes::StyleCollection::nodeStyle().Opacity));
+    }
 }
 
 TEST_CASE("BasicGraphicsScene undo/redo support", "[graphics]")
@@ -117,5 +151,50 @@ TEST_CASE("BasicGraphicsScene undo/redo support", "[graphics]")
         // automatically track model changes. This test verifies the stack exists
         // and can be used for undo operations.
         CHECK(undoStack.count() >= 0);
+    }
+}
+
+TEST_CASE("Node shadow bounds follow visual margins", "[graphics]")
+{
+    auto app = applicationSetup();
+    TestGraphModel model;
+    BasicGraphicsScene scene(model);
+
+    SECTION("Shadow-enabled bounds include the full painter shadow")
+    {
+        NodeId const nodeId = model.addNode("TestNode");
+        model.setNodeData(nodeId, NodeRole::Style, shadow_enabled_style());
+        QCoreApplication::processEvents();
+
+        auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+        REQUIRE(nodeGraphics != nullptr);
+
+        QRectF const bounds = nodeGraphics->boundingRect();
+        QSize const size = scene.nodeGeometry().size(nodeId);
+        QMarginsF const margins = QtNodes::node_rendering::node_visual_margins(true);
+
+        CHECK(bounds.left() == Approx(-margins.left()));
+        CHECK(bounds.top() == Approx(-margins.top()));
+        CHECK(bounds.right() == Approx(size.width() + margins.right()));
+        CHECK(bounds.bottom() == Approx(size.height() + margins.bottom()));
+    }
+
+    SECTION("Shadow-disabled bounds fall back to port margins only")
+    {
+        NodeId const nodeId = model.addNode("TestNode");
+        model.setNodeData(nodeId, NodeRole::Style, shadow_disabled_style());
+        QCoreApplication::processEvents();
+
+        auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+        REQUIRE(nodeGraphics != nullptr);
+
+        QRectF const bounds = nodeGraphics->boundingRect();
+        QSize const size = scene.nodeGeometry().size(nodeId);
+        QMarginsF const margins = QtNodes::node_rendering::node_visual_margins(false);
+
+        CHECK(bounds.left() == Approx(-margins.left()));
+        CHECK(bounds.top() == Approx(-margins.top()));
+        CHECK(bounds.right() == Approx(size.width() + margins.right()));
+        CHECK(bounds.bottom() == Approx(size.height() + margins.bottom()));
     }
 }

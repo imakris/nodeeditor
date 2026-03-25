@@ -153,7 +153,7 @@ GraphicsView::GraphicsView(QWidget *parent)
     int maxSize = 32767;
     setSceneRect(-maxSize, -maxSize, (maxSize * 2), (maxSize * 2));
 
-    apply_rasterization_policy();
+    applyRasterizationPolicy();
 }
 
 GraphicsView::GraphicsView(BasicGraphicsScene *scene, QWidget *parent)
@@ -197,7 +197,7 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
         return;
     }
 
-    apply_rasterization_policy();
+    applyRasterizationPolicy();
 
     {
         // setup actions
@@ -505,7 +505,7 @@ void GraphicsView::setRasterizationPolicy(RasterizationPolicy policy)
     }
 
     _rasterizationPolicy = policy;
-    apply_rasterization_policy();
+    applyRasterizationPolicy();
 }
 
 void GraphicsView::stopZoomAnimation()
@@ -789,7 +789,7 @@ void GraphicsView::zoomFitSelected()
     }
 }
 
-void GraphicsView::apply_rasterization_policy()
+void GraphicsView::applyRasterizationPolicy()
 {
     if (_rasterizationPolicy == RasterizationPolicy::Consistent) {
         setCacheMode(QGraphicsView::CacheNone);

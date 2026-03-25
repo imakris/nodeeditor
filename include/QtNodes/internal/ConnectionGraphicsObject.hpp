@@ -96,10 +96,7 @@ private:
 
     std::pair<QPointF, QPointF> pointsC1C2Vertical() const;
 
-private:
     void rebuildCachedGeometry() const;
-
-private:
     static constexpr int k_path_sample_count = 61;
 
     ConnectionId _connectionId;

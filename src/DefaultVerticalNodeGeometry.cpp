@@ -1,11 +1,14 @@
 #include "DefaultVerticalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "NodeRenderingUtils.hpp"
 #include "NodeData.hpp"
 
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
+
+#include <optional>
 
 namespace QtNodes {
 
@@ -26,10 +29,9 @@ DefaultVerticalNodeGeometry::DefaultVerticalNodeGeometry(AbstractGraphModel &gra
 QRectF DefaultVerticalNodeGeometry::boundingRect(NodeId const nodeId) const
 {
     QSize s = size(nodeId);
-
-    constexpr qreal base = 20.0;
-    constexpr qreal shadow_extra = 20.0;
-    QMarginsF margins(base, base, base + shadow_extra, base + shadow_extra);
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &style = node_rendering::resolved_node_style(_graphModel, nodeId, fallback_style);
+    QMarginsF const margins = node_rendering::node_visual_margins(style.ShadowEnabled);
 
     QRectF r(QPointF(0, 0), s);
 

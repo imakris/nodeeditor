@@ -17,6 +17,10 @@ class NodeGraphicsObject;
 class NodeState;
 
 /// @ Lightweight class incapsulating paint code.
+///
+/// NOTE: Some draw helpers accept GraphicsView* for zoom-aware text rendering.
+/// That paint-time coupling is intentional for now, but custom painters need to
+/// account for it.
 class NODE_EDITOR_PUBLIC DefaultNodePainter : public AbstractNodePainter
 {
 public:

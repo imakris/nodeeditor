@@ -6,6 +6,7 @@
 #include "ConnectionGraphicsObject.hpp"
 #include "ConnectionIdUtils.hpp"
 #include "GraphicsView.hpp"
+#include "NodeRenderingUtils.hpp"
 #include "NodeConnectionInteraction.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGroup.hpp"
@@ -16,6 +17,7 @@
 #include <QtWidgets/QtWidgets>
 
 #include <cstdlib>
+#include <optional>
 
 namespace QtNodes {
 
@@ -77,9 +79,10 @@ NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
 
     setCacheMode(initial_cache_mode(scene));
 
-    QJsonObject nodeStyleJson = _graphModel.nodeData(_nodeId, NodeRole::Style).toJsonObject();
-
-    NodeStyle nodeStyle(nodeStyleJson);
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &nodeStyle = node_rendering::resolved_node_style(_graphModel,
+                                                                     _nodeId,
+                                                                     fallback_style);
 
     setOpacity(nodeStyle.Opacity);
 

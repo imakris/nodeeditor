@@ -120,6 +120,8 @@ private:
     QGraphicsProxyWidget *_proxyWidget;
 
     std::weak_ptr<NodeGroup> _nodeGroup{};
+    // Transient paint-time context: set only while this node is being painted.
+    // A future cleanup should prefer threading this through explicitly.
     GraphicsView *_currentGraphicsView = nullptr;
 };
 } // namespace QtNodes

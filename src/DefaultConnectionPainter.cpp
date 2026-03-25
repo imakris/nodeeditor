@@ -23,6 +23,16 @@ QPen make_connection_pen(QColor const &color, qreal width, Qt::PenStyle style = 
 
 } // namespace
 
+QPixmap const &DefaultConnectionPainter::convertPixmap() const
+{
+    if (!_convertPixmapInitialized) {
+        _convertPixmap = QIcon(QStringLiteral(":/convert.png")).pixmap(QSize(22, 22));
+        _convertPixmapInitialized = true;
+    }
+
+    return _convertPixmap;
+}
+
 QPainterPath DefaultConnectionPainter::cubicPath(ConnectionGraphicsObject const &connection) const
 {
     return connection.cachedCubicPath();
@@ -127,8 +137,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
 
     bool const selected = cgo.isSelected();
 
-        auto const cubic = cubicPath(cgo);
-        if (useGradientColor) {
+    auto const cubic = cubicPath(cgo);
+    if (useGradientColor) {
         painter->setBrush(Qt::NoBrush);
 
         QColor cOut = normalColorOut;
@@ -150,11 +160,12 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
             painter->drawLine(cgo.cachedSamplePoint(i), cgo.cachedSamplePoint(i + 1));
         }
 
-        QRectF const targetRect(cgo.cachedMidPoint().x() - _convertPixmap.width() / 2.0,
-                                cgo.cachedMidPoint().y() - _convertPixmap.height() / 2.0,
-                                _convertPixmap.width(),
-                                _convertPixmap.height());
-        painter->drawPixmap(targetRect, _convertPixmap, QRectF(_convertPixmap.rect()));
+        QPixmap const &conversionPixmap = convertPixmap();
+        QRectF const targetRect(cgo.cachedMidPoint().x() - conversionPixmap.width() / 2.0,
+                                cgo.cachedMidPoint().y() - conversionPixmap.height() / 2.0,
+                                conversionPixmap.width(),
+                                conversionPixmap.height());
+        painter->drawPixmap(targetRect, conversionPixmap, QRectF(conversionPixmap.rect()));
     } else {
         p.setColor(normalColorOut);
 

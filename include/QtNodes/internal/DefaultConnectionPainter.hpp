@@ -18,6 +18,7 @@ class DefaultConnectionPainter : public AbstractConnectionPainter
 public:
     void paint(QPainter *painter, ConnectionGraphicsObject const &cgo) const override;
     QPainterPath getPainterStroke(ConnectionGraphicsObject const &cgo) const override;
+
 private:
     QPainterPath cubicPath(ConnectionGraphicsObject const &connection) const;
     void drawSketchLine(QPainter *painter, ConnectionGraphicsObject const &cgo) const;
@@ -28,7 +29,10 @@ private:
 #endif
 
 private:
-    QPixmap _convertPixmap{QIcon(QStringLiteral(":/convert.png")).pixmap(QSize(22, 22))};
+    QPixmap const &convertPixmap() const;
+
+    mutable QPixmap _convertPixmap;
+    mutable bool _convertPixmapInitialized = false;
 };
 
 } // namespace QtNodes

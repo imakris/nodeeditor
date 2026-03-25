@@ -1,11 +1,14 @@
 #include "DefaultHorizontalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "NodeRenderingUtils.hpp"
 #include "NodeData.hpp"
 
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
+
+#include <optional>
 
 namespace QtNodes {
 
@@ -26,12 +29,9 @@ DefaultHorizontalNodeGeometry::DefaultHorizontalNodeGeometry(AbstractGraphModel 
 QRectF DefaultHorizontalNodeGeometry::boundingRect(NodeId const nodeId) const
 {
     QSize s = size(nodeId);
-
-    // Margin must accommodate port circles and the painter-based shadow.
-    // The shadow extends further to the right and bottom due to its offset.
-    constexpr qreal base = 20.0;
-    constexpr qreal shadow_extra = 20.0;
-    QMarginsF margins(base, base, base + shadow_extra, base + shadow_extra);
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &style = node_rendering::resolved_node_style(_graphModel, nodeId, fallback_style);
+    QMarginsF const margins = node_rendering::node_visual_margins(style.ShadowEnabled);
 
     QRectF r(QPointF(0, 0), s);
 

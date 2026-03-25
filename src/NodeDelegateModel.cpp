@@ -1,8 +1,35 @@
 #include "NodeDelegateModel.hpp"
 
+#include "NodeRenderingUtils.hpp"
 #include "StyleCollection.hpp"
 
 namespace QtNodes {
+
+namespace {
+
+QIcon const &status_icon(NodeStyle const &style, NodeProcessingStatus status)
+{
+    switch (status) {
+    case NodeProcessingStatus::Updated:
+        return style.statusUpdated;
+    case NodeProcessingStatus::Processing:
+        return style.statusProcessing;
+    case NodeProcessingStatus::Pending:
+        return style.statusPending;
+    case NodeProcessingStatus::Empty:
+        return style.statusEmpty;
+    case NodeProcessingStatus::Failed:
+        return style.statusInvalid;
+    case NodeProcessingStatus::Partial:
+        return style.statusPartial;
+    case NodeProcessingStatus::NoStatus:
+        break;
+    }
+
+    return style.statusEmpty;
+}
+
+} // namespace
 
 NodeDelegateModel::NodeDelegateModel()
     : _nodeStyle(StyleCollection::nodeStyle())
@@ -53,12 +80,15 @@ NodeStyle const &NodeDelegateModel::nodeStyle() const
 
 void NodeDelegateModel::setNodeStyle(NodeStyle const &style)
 {
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
     _nodeStyle = style;
     _processingStatusIconDirty = true;
 }
 
-QPixmap NodeDelegateModel::processingStatusIcon() const
+QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
 {
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+
     int const resolution = _nodeStyle.processingIconStyle._resolution;
 
     if (_processingStatus == NodeProcessingStatus::NoStatus) {
@@ -66,43 +96,34 @@ QPixmap NodeDelegateModel::processingStatusIcon() const
     }
 
     if (!_processingStatusIconDirty && _cachedProcessingStatus == _processingStatus
-        && _cachedProcessingStatusResolution == resolution) {
-        return _cachedProcessingStatusIcon;
+        && _cachedProcessingStatusResolution == resolution
+        && qFuzzyCompare(_cachedProcessingStatusDpr, dpr)) {
+        return _cachedProcessingStatusImage;
     }
 
-    switch (_processingStatus) {
-    case NodeProcessingStatus::NoStatus:
-        _cachedProcessingStatusIcon = {};
-        break;
-    case NodeProcessingStatus::Updated:
-        _cachedProcessingStatusIcon = _nodeStyle.statusUpdated.pixmap(resolution);
-        break;
-    case NodeProcessingStatus::Processing:
-        _cachedProcessingStatusIcon = _nodeStyle.statusProcessing.pixmap(resolution);
-        break;
-    case NodeProcessingStatus::Pending:
-        _cachedProcessingStatusIcon = _nodeStyle.statusPending.pixmap(resolution);
-        break;
-    case NodeProcessingStatus::Empty:
-        _cachedProcessingStatusIcon = _nodeStyle.statusEmpty.pixmap(resolution);
-        break;
-    case NodeProcessingStatus::Failed:
-        _cachedProcessingStatusIcon = _nodeStyle.statusInvalid.pixmap(resolution);
-        break;
-    case NodeProcessingStatus::Partial:
-        _cachedProcessingStatusIcon = _nodeStyle.statusPartial.pixmap(resolution);
-        break;
-    }
+    _cachedProcessingStatusImage = node_rendering::render_icon_image(
+        status_icon(_nodeStyle, _processingStatus),
+        QSize(resolution, resolution),
+        dpr);
 
     _cachedProcessingStatus = _processingStatus;
     _cachedProcessingStatusResolution = resolution;
+    _cachedProcessingStatusDpr = dpr;
     _processingStatusIconDirty = false;
 
-    return _cachedProcessingStatusIcon;
+    return _cachedProcessingStatusImage;
+}
+
+ProcessingIconStyle NodeDelegateModel::processingIconStyle() const
+{
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    return _nodeStyle.processingIconStyle;
 }
 
 void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap &pixmap)
 {
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+
     switch (status) {
     case NodeProcessingStatus::NoStatus:
         break;
@@ -131,12 +152,14 @@ void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap
 
 void NodeDelegateModel::setStatusIconStyle(const ProcessingIconStyle &style)
 {
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
     _nodeStyle.processingIconStyle = style;
     _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setNodeProcessingStatus(NodeProcessingStatus status)
 {
+    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
     _processingStatus = status;
     _processingStatusIconDirty = true;
 }
