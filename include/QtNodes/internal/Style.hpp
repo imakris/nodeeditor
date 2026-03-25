@@ -5,7 +5,6 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
-#include <QtCore/QObject>
 #include <QtCore/QString>
 
 namespace QtNodes {
