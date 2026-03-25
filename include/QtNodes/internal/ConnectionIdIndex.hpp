@@ -14,7 +14,7 @@ public:
     using ConnectionsByPort = std::unordered_map<PortIndex, ConnectionSet>;
 
 public:
-    ConnectionSet const &connectivity() const { return _connectivity; }
+    ConnectionSet const &connectivity() const noexcept { return _connectivity; }
 
     ConnectionSet const &allConnectionIds(NodeId const nodeId) const
     {
@@ -47,7 +47,7 @@ public:
         return portIt->second;
     }
 
-    bool contains(ConnectionId const connectionId) const
+    bool contains(ConnectionId const connectionId) const noexcept
     {
         return _connectivity.find(connectionId) != _connectivity.end();
     }
@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    static ConnectionSet const &emptyConnections()
+    static ConnectionSet const &emptyConnections() noexcept
     {
         static ConnectionSet const empty{};
         return empty;

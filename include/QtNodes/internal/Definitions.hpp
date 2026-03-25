@@ -111,18 +111,18 @@ struct ConnectionId
     PortIndex inPortIndex;
 };
 
-inline bool operator==(ConnectionId const &a, ConnectionId const &b)
+inline bool operator==(ConnectionId const &a, ConnectionId const &b) noexcept
 {
     return a.outNodeId == b.outNodeId && a.outPortIndex == b.outPortIndex
            && a.inNodeId == b.inNodeId && a.inPortIndex == b.inPortIndex;
 }
 
-inline bool operator!=(ConnectionId const &a, ConnectionId const &b)
+inline bool operator!=(ConnectionId const &a, ConnectionId const &b) noexcept
 {
     return !(a == b);
 }
 
-inline void invertConnection(ConnectionId &id)
+inline void invertConnection(ConnectionId &id) noexcept
 {
     std::swap(id.outNodeId, id.inNodeId);
     std::swap(id.outPortIndex, id.inPortIndex);

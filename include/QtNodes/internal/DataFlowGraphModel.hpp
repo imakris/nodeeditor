@@ -34,7 +34,10 @@ public:
 public:
     DataFlowGraphModel(std::shared_ptr<NodeDelegateModelRegistry> registry);
 
-    [[nodiscard]] std::shared_ptr<NodeDelegateModelRegistry> dataModelRegistry() { return _registry; }
+    [[nodiscard]] std::shared_ptr<NodeDelegateModelRegistry> dataModelRegistry() noexcept
+    {
+        return _registry;
+    }
 
 public:
     NodeIdSet const &allNodeIds() const override;
@@ -103,7 +106,7 @@ public:
     }
 
     /// Loops do not make any sense in uni-direction data propagation
-    bool loopsEnabled() const override { return false; }
+    bool loopsEnabled() const noexcept override { return false; }
 
 Q_SIGNALS:
     void inPortDataWasSet(NodeId const, PortType const, PortIndex const);

@@ -90,7 +90,7 @@ public:
    * @brief Returns the number of groups created during the program's execution.
    * Used when automatically naming groups.
    */
-    static int groupCount();
+    static int groupCount() noexcept;
 
 public Q_SLOTS:
     /**

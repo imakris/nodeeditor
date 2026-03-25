@@ -26,7 +26,7 @@ public:
     // Needed for qgraphicsitem_cast
     enum { Type = UserType + 1 };
 
-    int type() const override { return Type; }
+    int type() const noexcept override { return Type; }
 
 public:
     NodeGraphicsObject(BasicGraphicsScene &scene, NodeId node);
@@ -38,15 +38,15 @@ public:
 
     BasicGraphicsScene *nodeScene() const;
 
-    NodeId nodeId() { return _nodeId; }
+    NodeId nodeId() noexcept { return _nodeId; }
 
-    NodeId nodeId() const { return _nodeId; }
+    NodeId nodeId() const noexcept { return _nodeId; }
 
     NodeState &nodeState() { return _nodeState; }
 
     NodeState const &nodeState() const { return _nodeState; }
 
-    GraphicsView *currentGraphicsView() const { return _currentGraphicsView; }
+    GraphicsView *currentGraphicsView() const noexcept { return _currentGraphicsView; }
 
     QRectF boundingRect() const override;
 
@@ -75,7 +75,7 @@ public:
     void setNodeGroup(std::shared_ptr<NodeGroup> group);
 
     /// Unsets NodeGroup, setting it to an empty pointer.
-    void unsetNodeGroup() { _nodeGroup = std::weak_ptr<NodeGroup>(); }
+    void unsetNodeGroup() noexcept { _nodeGroup = std::weak_ptr<NodeGroup>(); }
 
     /// Getter for the NodeGroup object.
     std::weak_ptr<NodeGroup> nodeGroup() const { return _nodeGroup; }

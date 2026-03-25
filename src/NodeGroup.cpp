@@ -103,7 +103,7 @@ bool NodeGroup::empty() const
     return _childNodes.empty();
 }
 
-int NodeGroup::groupCount()
+int NodeGroup::groupCount() noexcept
 {
     return _groupCount.load(std::memory_order_relaxed);
 }
