@@ -16,39 +16,18 @@ QtNodes::AbstractGraphModel::NodeIdSet const &SimpleGraphModel::allNodeIds() con
 QtNodes::AbstractGraphModel::ConnectionIdSet const &
 SimpleGraphModel::allConnectionIds(NodeId const nodeId) const
 {
-    auto const it = _nodeConnections.find(nodeId);
-    if (it == _nodeConnections.end()) {
-        return emptyConnections();
-    }
-
-    return it->second;
+    return _connectionIndex.allConnectionIds(nodeId);
 }
 
 QtNodes::AbstractGraphModel::ConnectionIdSet const &
 SimpleGraphModel::connections(NodeId nodeId, PortType portType, PortIndex portIndex) const
 {
-    if (portType == PortType::None) {
-        return emptyConnections();
-    }
-
-    auto const &connectionsByPort = (portType == PortType::In) ? _inConnectionsByPort
-                                                                : _outConnectionsByPort;
-    auto const nodeIt = connectionsByPort.find(nodeId);
-    if (nodeIt == connectionsByPort.end()) {
-        return emptyConnections();
-    }
-
-    auto const portIt = nodeIt->second.find(portIndex);
-    if (portIt == nodeIt->second.end()) {
-        return emptyConnections();
-    }
-
-    return portIt->second;
+    return _connectionIndex.connections(nodeId, portType, portIndex);
 }
 
 bool SimpleGraphModel::connectionExists(ConnectionId const connectionId) const
 {
-    return (_connectivity.find(connectionId) != _connectivity.end());
+    return _connectionIndex.contains(connectionId);
 }
 
 NodeId SimpleGraphModel::addNode(QString const nodeType)
@@ -63,13 +42,12 @@ NodeId SimpleGraphModel::addNode(QString const nodeType)
 
 bool SimpleGraphModel::connectionPossible(ConnectionId const connectionId) const
 {
-    return _connectivity.find(connectionId) == _connectivity.end();
+    return !_connectionIndex.contains(connectionId);
 }
 
 void SimpleGraphModel::addConnection(ConnectionId const connectionId)
 {
-    _connectivity.insert(connectionId);
-    indexConnection(connectionId);
+    _connectionIndex.add(connectionId);
 
     Q_EMIT connectionCreated(connectionId);
 }
@@ -193,15 +171,7 @@ bool SimpleGraphModel::setPortData(
 
 bool SimpleGraphModel::deleteConnection(ConnectionId const connectionId)
 {
-    bool disconnected = false;
-
-    auto it = _connectivity.find(connectionId);
-
-    if (it != _connectivity.end()) {
-        disconnected = true;
-        _connectivity.erase(it);
-        unindexConnection(connectionId);
-    }
+    bool const disconnected = _connectionIndex.remove(connectionId);
 
     if (disconnected)
         Q_EMIT connectionDeleted(connectionId);
@@ -264,62 +234,4 @@ void SimpleGraphModel::loadNode(QJsonObject const &nodeJson)
 
         setNodeData(restoredNodeId, NodeRole::Position, pos);
     }
-}
-
-QtNodes::AbstractGraphModel::ConnectionIdSet const &SimpleGraphModel::emptyConnections()
-{
-    static ConnectionIdSet const empty{};
-    return empty;
-}
-
-void SimpleGraphModel::indexConnection(ConnectionId const connectionId)
-{
-    _nodeConnections[connectionId.inNodeId].insert(connectionId);
-    _nodeConnections[connectionId.outNodeId].insert(connectionId);
-    _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
-    _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
-}
-
-void SimpleGraphModel::unindexConnection(ConnectionId const connectionId)
-{
-    auto eraseFromNode = [&](NodeId nodeId) {
-        auto nodeIt = _nodeConnections.find(nodeId);
-        if (nodeIt == _nodeConnections.end()) {
-            return;
-        }
-
-        nodeIt->second.erase(connectionId);
-        if (nodeIt->second.empty()) {
-            _nodeConnections.erase(nodeIt);
-        }
-    };
-
-    auto eraseFromPortMap =
-        [&](std::unordered_map<NodeId, ConnectionsByPort> &connectionsByPort,
-            NodeId nodeId,
-            PortIndex portIndex) {
-            auto nodeIt = connectionsByPort.find(nodeId);
-            if (nodeIt == connectionsByPort.end()) {
-                return;
-            }
-
-            auto portIt = nodeIt->second.find(portIndex);
-            if (portIt == nodeIt->second.end()) {
-                return;
-            }
-
-            portIt->second.erase(connectionId);
-            if (portIt->second.empty()) {
-                nodeIt->second.erase(portIt);
-            }
-
-            if (nodeIt->second.empty()) {
-                connectionsByPort.erase(nodeIt);
-            }
-        };
-
-    eraseFromNode(connectionId.inNodeId);
-    eraseFromNode(connectionId.outNodeId);
-    eraseFromPortMap(_inConnectionsByPort, connectionId.inNodeId, connectionId.inPortIndex);
-    eraseFromPortMap(_outConnectionsByPort, connectionId.outNodeId, connectionId.outPortIndex);
 }

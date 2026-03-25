@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
+#include <atomic>
 #include <utility>
 
 using QtNodes::GroupGraphicsObject;
@@ -12,7 +13,7 @@ using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeGroup;
 using QtNodes::NodeId;
 
-int NodeGroup::_groupCount = 0;
+std::atomic<int> NodeGroup::_groupCount{0};
 
 NodeGroup::NodeGroup(std::vector<NodeGraphicsObject *> nodes,
                      GroupId groupId,
@@ -24,7 +25,7 @@ NodeGroup::NodeGroup(std::vector<NodeGraphicsObject *> nodes,
     , _childNodes(std::move(nodes))
     , _groupGraphicsObject(nullptr)
 {
-    _groupCount++;
+    _groupCount.fetch_add(1, std::memory_order_relaxed);
 }
 
 NodeGroup::~NodeGroup() = default;
@@ -104,7 +105,7 @@ bool NodeGroup::empty() const
 
 int NodeGroup::groupCount()
 {
-    return _groupCount;
+    return _groupCount.load(std::memory_order_relaxed);
 }
 
 void NodeGroup::addNode(NodeGraphicsObject *node)

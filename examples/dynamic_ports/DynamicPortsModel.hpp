@@ -5,6 +5,7 @@
 #include <QtCore/QSize>
 
 #include <QtNodes/AbstractGraphModel>
+#include <QtNodes/ConnectionIdIndex>
 #include <QtNodes/StyleCollection>
 
 #include <unordered_map>
@@ -102,23 +103,13 @@ public:
     NodeId newNodeId() override { return _nextNodeId++; }
 
 private:
-    using ConnectionsByPort = std::unordered_map<PortIndex, ConnectionIdSet>;
-
-    static ConnectionIdSet const &emptyConnections();
-
-    void indexConnection(ConnectionId const connectionId);
-    void unindexConnection(ConnectionId const connectionId);
-
     NodeIdSet _nodeIds;
 
     /// [Important] This is a user defined data structure backing your model.
     /// In your case it could be anything else representing a graph, for example, a
     /// table. Or a collection of structs with pointers to each other. Or an
     /// abstract syntax tree, you name it.
-    ConnectionIdSet _connectivity;
-    std::unordered_map<NodeId, ConnectionIdSet> _nodeConnections;
-    std::unordered_map<NodeId, ConnectionsByPort> _inConnectionsByPort;
-    std::unordered_map<NodeId, ConnectionsByPort> _outConnectionsByPort;
+    QtNodes::ConnectionIdIndex _connectionIndex;
 
     mutable std::unordered_map<NodeId, NodeGeometryData> _nodeGeometryData;
 

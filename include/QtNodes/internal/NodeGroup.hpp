@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <atomic>
 #include <vector>
 #include <QtCore/QByteArray>
 #include <QtCore/QObject>
@@ -134,6 +135,6 @@ private:
    * @brief Static variable to count the number of instances of groups that
    * were created during execution. Used when automatically naming groups.
    */
-    static int _groupCount;
+    static std::atomic<int> _groupCount;
 };
 } // namespace QtNodes

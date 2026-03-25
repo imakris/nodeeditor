@@ -102,6 +102,7 @@ set(HPP_HEADER_FILES
   include/QtNodes/internal/BasicGraphicsScene.hpp
   include/QtNodes/internal/Compiler.hpp
   include/QtNodes/internal/ConnectionGraphicsObject.hpp
+  include/QtNodes/internal/ConnectionIdIndex.hpp
   include/QtNodes/internal/ConnectionIdHash.hpp
   include/QtNodes/internal/ConnectionIdUtils.hpp
   include/QtNodes/internal/ConnectionState.hpp

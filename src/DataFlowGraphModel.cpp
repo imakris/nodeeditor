@@ -1,6 +1,5 @@
 #include "DataFlowGraphModel.hpp"
 
-#include "ConnectionIdHash.hpp"
 #include "ConnectionIdUtils.hpp"
 #include "Definitions.hpp"
 
@@ -15,8 +14,6 @@
 namespace QtNodes {
 
 namespace {
-
-AbstractGraphModel::ConnectionIdSet const k_empty_connection_ids{};
 
 NodeId json_value_to_node_id(QJsonValue const &value)
 {
@@ -55,39 +52,18 @@ AbstractGraphModel::NodeIdSet const &DataFlowGraphModel::allNodeIds() const
 AbstractGraphModel::ConnectionIdSet const &
 DataFlowGraphModel::allConnectionIds(NodeId const nodeId) const
 {
-    auto it = _nodeConnections.find(nodeId);
-    if (it == _nodeConnections.end()) {
-        return k_empty_connection_ids;
-    }
-
-    return it->second;
+    return _connectionIndex.allConnectionIds(nodeId);
 }
 
 AbstractGraphModel::ConnectionIdSet const &DataFlowGraphModel::connections(
     NodeId nodeId, PortType portType, PortIndex portIndex) const
 {
-    if (portType == PortType::None) {
-        return k_empty_connection_ids;
-    }
-
-    auto const &connectionsByPort = (portType == PortType::In) ? _inConnectionsByPort
-                                                                : _outConnectionsByPort;
-    auto nodeIt = connectionsByPort.find(nodeId);
-    if (nodeIt == connectionsByPort.end()) {
-        return k_empty_connection_ids;
-    }
-
-    auto portIt = nodeIt->second.find(portIndex);
-    if (portIt == nodeIt->second.end()) {
-        return k_empty_connection_ids;
-    }
-
-    return portIt->second;
+    return _connectionIndex.connections(nodeId, portType, portIndex);
 }
 
 bool DataFlowGraphModel::connectionExists(ConnectionId const connectionId) const
 {
-    return (_connectivity.find(connectionId) != _connectivity.end());
+    return _connectionIndex.contains(connectionId);
 }
 
 NodeId DataFlowGraphModel::addNode(QString const nodeType)
@@ -197,8 +173,7 @@ void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
         return;
     }
 
-    _connectivity.insert(connectionId);
-    indexConnection(connectionId);
+    _connectionIndex.add(connectionId);
 
     sendConnectionCreation(connectionId);
 
@@ -249,58 +224,6 @@ void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId n
     connect(model, &NodeDelegateModel::requestNodeUpdate, this, [nodeId, this]() {
         Q_EMIT nodeUpdated(nodeId);
     });
-}
-
-void DataFlowGraphModel::indexConnection(ConnectionId const connectionId)
-{
-    _nodeConnections[connectionId.outNodeId].insert(connectionId);
-    _nodeConnections[connectionId.inNodeId].insert(connectionId);
-    _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
-    _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
-}
-
-void DataFlowGraphModel::unindexConnection(ConnectionId const connectionId)
-{
-    auto erase_from_node = [&](NodeId nodeId) {
-        auto nodeIt = _nodeConnections.find(nodeId);
-        if (nodeIt == _nodeConnections.end()) {
-            return;
-        }
-
-        nodeIt->second.erase(connectionId);
-        if (nodeIt->second.empty()) {
-            _nodeConnections.erase(nodeIt);
-        }
-    };
-
-    auto erase_from_port_map =
-        [&](std::unordered_map<NodeId, Connections_by_port> &connectionsByPort,
-            NodeId nodeId,
-            PortIndex portIndex) {
-            auto nodeIt = connectionsByPort.find(nodeId);
-            if (nodeIt == connectionsByPort.end()) {
-                return;
-            }
-
-            auto portIt = nodeIt->second.find(portIndex);
-            if (portIt == nodeIt->second.end()) {
-                return;
-            }
-
-            portIt->second.erase(connectionId);
-            if (portIt->second.empty()) {
-                nodeIt->second.erase(portIt);
-            }
-
-            if (nodeIt->second.empty()) {
-                connectionsByPort.erase(nodeIt);
-            }
-        };
-
-    erase_from_node(connectionId.outNodeId);
-    erase_from_node(connectionId.inNodeId);
-    erase_from_port_map(_outConnectionsByPort, connectionId.outNodeId, connectionId.outPortIndex);
-    erase_from_port_map(_inConnectionsByPort, connectionId.inNodeId, connectionId.inPortIndex);
 }
 
 void DataFlowGraphModel::sendConnectionCreation(ConnectionId const connectionId)
@@ -590,18 +513,9 @@ bool DataFlowGraphModel::setPortData(
 
 bool DataFlowGraphModel::deleteConnection(ConnectionId const connectionId)
 {
-    bool disconnected = false;
-
-    auto it = _connectivity.find(connectionId);
-
-    if (it != _connectivity.end()) {
-        disconnected = true;
-
-        _connectivity.erase(it);
-    }
+    bool const disconnected = _connectionIndex.remove(connectionId);
 
     if (disconnected) {
-        unindexConnection(connectionId);
         sendConnectionDeletion(connectionId);
 
         propagateEmptyDataTo(getNodeId(PortType::In, connectionId),
@@ -665,7 +579,7 @@ QJsonObject DataFlowGraphModel::save() const
     sceneJson["nodes"] = nodesJsonArray;
 
     QJsonArray connJsonArray;
-    for (auto const &cid : _connectivity) {
+    for (auto const &cid : _connectionIndex.connectivity()) {
         connJsonArray.append(toJson(cid));
     }
     sceneJson["connections"] = connJsonArray;
