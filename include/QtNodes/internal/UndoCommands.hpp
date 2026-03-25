@@ -64,7 +64,7 @@ private:
 
 private:
     BasicGraphicsScene *_scene;
-    QPointF const &_mouseScenePos;
+    QPointF _mouseScenePos;
     QJsonObject _newSceneJson;
 };
 

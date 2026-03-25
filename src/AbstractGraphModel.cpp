@@ -13,7 +13,7 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
 
     unsigned int portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
 
-    if (first > portCount - 1)
+    if (portCount == 0 || first >= portCount)
         return;
 
     if (last < first)

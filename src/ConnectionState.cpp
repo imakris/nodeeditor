@@ -53,8 +53,11 @@ NodeId ConnectionState::lastHoveredNode() const
 void ConnectionState::resetLastHoveredNode()
 {
     if (_lastHoveredNode != InvalidNodeId) {
-        auto ngo = _cgo.nodeScene()->nodeGraphicsObject(_lastHoveredNode);
-        ngo->update();
+        if (auto *scene = _cgo.nodeScene()) {
+            if (auto *ngo = scene->nodeGraphicsObject(_lastHoveredNode)) {
+                ngo->update();
+            }
+        }
     }
 
     _lastHoveredNode = InvalidNodeId;

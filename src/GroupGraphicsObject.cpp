@@ -14,6 +14,20 @@ using QtNodes::GroupGraphicsObject;
 using QtNodes::NodeConnectionInteraction;
 using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeGroup;
+using QtNodes::NodeRole;
+
+namespace {
+
+void update_model_position_if_needed(NodeGraphicsObject &node)
+{
+    QPointF const scenePos = node.pos();
+    QPointF const modelPos = node.graphModel().nodeData<QPointF>(node.nodeId(), NodeRole::Position);
+    if (scenePos != modelPos) {
+        node.graphModel().setNodeData(node.nodeId(), NodeRole::Position, scenePos);
+    }
+}
+
+} // namespace
 
 IconGraphicsItem::IconGraphicsItem(QGraphicsItem *parent)
     : QGraphicsPixmapItem(parent)
@@ -200,6 +214,18 @@ void GroupGraphicsObject::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         moveNodes(diff);
         moveConnections();
     }
+}
+
+void GroupGraphicsObject::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    QGraphicsItem::mouseReleaseEvent(event);
+
+    for (auto &node : group().childNodes()) {
+        update_model_position_if_needed(*node);
+    }
+
+    moveConnections();
+    updateGroupGeometry();
 }
 
 void GroupGraphicsObject::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)

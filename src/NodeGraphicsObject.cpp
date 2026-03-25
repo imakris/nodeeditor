@@ -58,6 +58,20 @@ QGraphicsItem::CacheMode initial_cache_mode(BasicGraphicsScene &scene)
     return QGraphicsItem::DeviceCoordinateCache;
 }
 
+void update_model_position_if_needed(NodeGraphicsObject &node)
+{
+    auto *scene = node.nodeScene();
+    if (!scene) {
+        return;
+    }
+
+    QPointF const scenePos = node.pos();
+    QPointF const modelPos = node.graphModel().nodeData<QPointF>(node.nodeId(), NodeRole::Position);
+    if (scenePos != modelPos) {
+        node.graphModel().setNodeData(node.nodeId(), NodeRole::Position, scenePos);
+    }
+}
+
 } // namespace
 
 NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
@@ -253,15 +267,12 @@ void NodeGraphicsObject::mousePressEvent(QGraphicsSceneMouseEvent *event)
         // Start dragging existing connection.
         if (!connected.empty() && portToCheck == PortType::In) {
             auto const &cnId = *connected.begin();
+            if (auto *connection = nodeScene()->connectionGraphicsObject(cnId)) {
+                NodeConnectionInteraction interaction(*this, *connection, *nodeScene());
 
-            // Need ConnectionGraphicsObject
-
-            NodeConnectionInteraction interaction(*this,
-                                                  *nodeScene()->connectionGraphicsObject(cnId),
-                                                  *nodeScene());
-
-            if (_graphModel.detachPossible(cnId))
-                interaction.disconnect(portToCheck);
+                if (_graphModel.detachPossible(cnId))
+                    interaction.disconnect(portToCheck);
+            }
         } else // initialize new Connection
         {
             if (portToCheck == PortType::Out) {
@@ -401,6 +412,7 @@ void NodeGraphicsObject::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
     // position connections precisely after fast node move
     moveConnections();
+    update_model_position_if_needed(*this);
 
     if (nodeScene()->groupingEnabled() && _draggingIntoGroup && _possibleGroup
         && _nodeGroup.expired()) {

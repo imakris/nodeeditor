@@ -182,6 +182,9 @@ protected:
     /** @copydoc QGraphicsItem::mouseMoveEvent() */
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
 
+    /** @copydoc QGraphicsItem::mouseReleaseEvent() */
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+
     /** @copydoc QGraphicsItem::mouseDoubleClickEvent() */
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
 

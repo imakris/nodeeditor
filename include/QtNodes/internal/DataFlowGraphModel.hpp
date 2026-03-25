@@ -11,6 +11,7 @@
 #include <QJsonObject>
 
 #include <memory>
+#include <stdexcept>
 
 namespace QtNodes {
 
@@ -105,7 +106,14 @@ Q_SIGNALS:
     void inPortDataWasSet(NodeId const, PortType const, PortIndex const);
 
 private:
-    NodeId newNodeId() override { return _nextNodeId++; }
+    NodeId newNodeId() override
+    {
+        if (_nextNodeId == InvalidNodeId) {
+            throw std::overflow_error("No available node identifiers");
+        }
+
+        return _nextNodeId++;
+    }
 
     void connectDelegateModel(NodeDelegateModel *model, NodeId nodeId);
 

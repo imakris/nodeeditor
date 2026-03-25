@@ -5,11 +5,28 @@
 #include "Definitions.hpp"
 
 #include <QJsonArray>
+#include <QJsonValue>
 
 #include <stack>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace QtNodes {
+
+namespace {
+
+NodeId json_value_to_node_id(QJsonValue const &value)
+{
+    bool ok = false;
+    quint64 const parsed = value.toVariant().toULongLong(&ok);
+    if (!ok || parsed >= InvalidNodeId) {
+        return InvalidNodeId;
+    }
+
+    return static_cast<NodeId>(parsed);
+}
+
+} // namespace
 
 DataFlowGraphModel::DataFlowGraphModel(std::shared_ptr<NodeDelegateModelRegistry> registry)
     : _registry(std::move(registry))
@@ -113,9 +130,13 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
         return connected.empty() || (policy == ConnectionPolicy::Many);
     };
 
+    bool const portsValid = checkPortBounds(PortType::Out) && checkPortBounds(PortType::In);
+    if (!portsValid) {
+        return false;
+    }
+
     bool const basicChecks = getDataType(PortType::Out).id == getDataType(PortType::In).id
-                             && portVacant(PortType::Out) && portVacant(PortType::In)
-                             && checkPortBounds(PortType::Out) && checkPortBounds(PortType::In);
+                             && portVacant(PortType::Out) && portVacant(PortType::In);
 
     // In data-flow mode (this class) it's important to forbid graph loops.
     // We perform depth-first graph traversal starting from the "Input" port of
@@ -123,11 +144,16 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
 
     auto hasLoops = [this, &connectionId]() -> bool {
         std::stack<NodeId> filo;
+        std::unordered_set<NodeId> visited;
         filo.push(connectionId.inNodeId);
 
         while (!filo.empty()) {
             auto id = filo.top();
             filo.pop();
+
+            if (!visited.insert(id).second) {
+                continue;
+            }
 
             if (id == connectionId.outNodeId) { // LOOP!
                 return true;
@@ -153,6 +179,10 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
 
 void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
 {
+    if (connectionExists(connectionId) || !connectionPossible(connectionId)) {
+        return;
+    }
+
     _connectivity.insert(connectionId);
 
     sendConnectionCreation(connectionId);
@@ -255,11 +285,21 @@ QVariant DataFlowGraphModel::nodeData(NodeId nodeId, NodeRole role) const
         break;
 
     case NodeRole::Position:
-        result = _nodeGeometryData[nodeId].pos;
+        if (auto geometryIt = _nodeGeometryData.find(nodeId); geometryIt != _nodeGeometryData.end()) {
+            result = geometryIt->second.pos;
+        }
+        else {
+            result = QPointF{};
+        }
         break;
 
     case NodeRole::Size:
-        result = _nodeGeometryData[nodeId].size;
+        if (auto geometryIt = _nodeGeometryData.find(nodeId); geometryIt != _nodeGeometryData.end()) {
+            result = geometryIt->second.size;
+        }
+        else {
+            result = QSize{};
+        }
         break;
 
     case NodeRole::CaptionVisible:
@@ -323,9 +363,9 @@ NodeFlags DataFlowGraphModel::nodeFlags(NodeId nodeId) const
 
 bool DataFlowGraphModel::setNodeData(NodeId nodeId, NodeRole role, QVariant value)
 {
-    Q_UNUSED(nodeId);
-    Q_UNUSED(role);
-    Q_UNUSED(value);
+    if (!nodeExists(nodeId)) {
+        return false;
+    }
 
     bool result = false;
 
@@ -371,6 +411,7 @@ bool DataFlowGraphModel::setNodeData(NodeId nodeId, NodeRole role, QVariant valu
             auto state = value.value<NodeValidationState>();
             if (auto node = delegateModel<NodeDelegateModel>(nodeId); node != nullptr) {
                 node->setValidationState(state);
+                result = true;
             }
         }
         Q_EMIT nodeUpdated(nodeId);
@@ -381,6 +422,7 @@ bool DataFlowGraphModel::setNodeData(NodeId nodeId, NodeRole role, QVariant valu
             auto status = value.value<QtNodes::NodeProcessingStatus>();
             if (auto node = delegateModel<NodeDelegateModel>(nodeId); node != nullptr) {
                 node->setNodeProcessingStatus(status);
+                result = true;
             }
         }
         Q_EMIT nodeUpdated(nodeId);
@@ -400,6 +442,15 @@ QVariant DataFlowGraphModel::portData(NodeId nodeId,
     auto it = _models.find(nodeId);
     if (it == _models.end())
         return result;
+
+    if (portType == PortType::None) {
+        return result;
+    }
+
+    PortCount const portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
+    if (portIndex >= portCount) {
+        return result;
+    }
 
     auto &model = it->second;
 
@@ -434,11 +485,18 @@ QVariant DataFlowGraphModel::portData(NodeId nodeId,
 bool DataFlowGraphModel::setPortData(
     NodeId nodeId, PortType portType, PortIndex portIndex, QVariant const &value, PortRole role)
 {
-    Q_UNUSED(nodeId);
-
     auto it = _models.find(nodeId);
     if (it == _models.end())
         return false;
+
+    if (portType == PortType::None) {
+        return false;
+    }
+
+    PortCount const portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
+    if (portIndex >= portCount) {
+        return false;
+    }
 
     auto &model = it->second;
 
@@ -452,6 +510,7 @@ bool DataFlowGraphModel::setPortData(
 
             // Triggers repainting on the scene.
             Q_EMIT inPortDataWasSet(nodeId, portType, portIndex);
+            return true;
         }
         break;
 
@@ -548,7 +607,10 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
     // loading.
     // 2. When undoing the deletion command.  Conflict is not possible
     // because all the new ids were created past the removed nodes.
-    NodeId restoredNodeId = nodeJson["id"].toInt();
+    NodeId restoredNodeId = json_value_to_node_id(nodeJson["id"]);
+    if (restoredNodeId == InvalidNodeId) {
+        throw std::logic_error("Invalid node id in serialized node");
+    }
 
     _nextNodeId = std::max(_nextNodeId, restoredNodeId + 1);
 

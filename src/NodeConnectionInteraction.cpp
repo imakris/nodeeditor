@@ -96,10 +96,14 @@ bool NodeConnectionInteraction::disconnect(PortType portToDisconnect) const
 
      //Repaint connection points.
     NodeId connectedNodeId = getNodeId(oppositePort(portToDisconnect), connectionId);
-    _scene.nodeGraphicsObject(connectedNodeId)->update();
+    if (auto *connectedNode = _scene.nodeGraphicsObject(connectedNodeId)) {
+        connectedNode->update();
+    }
 
     NodeId disconnectedNodeId = getNodeId(portToDisconnect, connectionId);
-    _scene.nodeGraphicsObject(disconnectedNodeId)->update();
+    if (auto *disconnectedNode = _scene.nodeGraphicsObject(disconnectedNodeId)) {
+        disconnectedNode->update();
+    }
 
     return true;
 }

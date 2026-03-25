@@ -804,8 +804,22 @@ std::weak_ptr<NodeGroup> BasicGraphicsScene::loadGroupFile()
 
     if (!file.open(QIODevice::ReadOnly)) {
         qDebug() << "Error loading group file!";
+        return std::weak_ptr<NodeGroup>();
     }
 
+    struct Current_dir_guard
+    {
+        QString path;
+
+        ~Current_dir_guard()
+        {
+            if (!path.isEmpty()) {
+                QDir::setCurrent(path);
+            }
+        }
+    };
+
+    Current_dir_guard currentDirGuard{QDir::currentPath()};
     QDir d = QFileInfo(fileName).absoluteDir();
     QString absolute = d.absolutePath();
     QDir::setCurrent(absolute);

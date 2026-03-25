@@ -9,7 +9,7 @@
 
 namespace QtNodes {
 
-inline PortIndex getNodeId(PortType portType, ConnectionId connectionId)
+inline NodeId getNodeId(PortType portType, ConnectionId const &connectionId)
 {
     NodeId id = InvalidNodeId;
 
@@ -22,7 +22,7 @@ inline PortIndex getNodeId(PortType portType, ConnectionId connectionId)
     return id;
 }
 
-inline PortIndex getPortIndex(PortType portType, ConnectionId connectionId)
+inline PortIndex getPortIndex(PortType portType, ConnectionId const &connectionId)
 {
     PortIndex index = InvalidPortIndex;
 
@@ -129,18 +129,23 @@ inline QJsonObject toJson(ConnectionId const &connId)
 
 inline ConnectionId fromJson(QJsonObject const &connJson)
 {
-    // Support both "inNodeId" (correct) and "intNodeId" (legacy typo) for backward compatibility
-    NodeId inNodeId = InvalidNodeId;
-    if (connJson.contains("inNodeId")) {
-        inNodeId = static_cast<NodeId>(connJson["inNodeId"].toInt(InvalidNodeId));
-    } else if (connJson.contains("intNodeId")) {
-        inNodeId = static_cast<NodeId>(connJson["intNodeId"].toInt(InvalidNodeId));
-    }
+    auto parse_unsigned = [](QJsonValue const &value, quint64 maxValue, quint64 invalidValue) {
+        bool ok = false;
+        quint64 const parsed = value.toVariant().toULongLong(&ok);
+        if (!ok || parsed > maxValue) {
+            return invalidValue;
+        }
 
-    ConnectionId connId{static_cast<NodeId>(connJson["outNodeId"].toInt(InvalidNodeId)),
-                        static_cast<PortIndex>(connJson["outPortIndex"].toInt(InvalidPortIndex)),
-                        inNodeId,
-                        static_cast<PortIndex>(connJson["inPortIndex"].toInt(InvalidPortIndex))};
+        return parsed;
+    };
+
+    ConnectionId connId{
+        static_cast<NodeId>(parse_unsigned(connJson["outNodeId"], InvalidNodeId - 1ull, InvalidNodeId)),
+        static_cast<PortIndex>(
+            parse_unsigned(connJson["outPortIndex"], InvalidPortIndex - 1ull, InvalidPortIndex)),
+        static_cast<NodeId>(parse_unsigned(connJson["inNodeId"], InvalidNodeId - 1ull, InvalidNodeId)),
+        static_cast<PortIndex>(
+            parse_unsigned(connJson["inPortIndex"], InvalidPortIndex - 1ull, InvalidPortIndex))};
 
     return connId;
 }

@@ -424,10 +424,9 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
         case NodeValidationState::State::Warning: {
             invalid = true;
             color = nodeStyle.WarningColor;
-            break;
+        } break;
         default:
             break;
-        }
         }
     }
 
