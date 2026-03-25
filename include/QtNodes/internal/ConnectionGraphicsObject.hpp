@@ -90,9 +90,7 @@ protected:
 private:
     void initializePosition();
 
-    std::pair<QPointF, QPointF> pointsC1C2Horizontal() const;
-
-    std::pair<QPointF, QPointF> pointsC1C2Vertical() const;
+    std::pair<QPointF, QPointF> computeControlPoints(Qt::Orientation orientation) const;
 
     void rebuildCachedGeometry() const;
     static constexpr int k_path_sample_count = 61;

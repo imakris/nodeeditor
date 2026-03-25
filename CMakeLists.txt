@@ -72,6 +72,7 @@ set(CPP_SOURCE_FILES
   src/DataFlowGraphModel.cpp
   src/DataFlowGraphicsScene.cpp
   src/DefaultConnectionPainter.cpp
+  src/DefaultNodeGeometryBase.cpp
   src/DefaultHorizontalNodeGeometry.cpp
   src/DefaultNodePainter.cpp
   src/DefaultVerticalNodeGeometry.cpp

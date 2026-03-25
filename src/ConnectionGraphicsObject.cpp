@@ -340,77 +340,53 @@ void ConnectionGraphicsObject::hoverLeaveEvent(QGraphicsSceneHoverEvent *event)
 
 std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2() const
 {
-    switch (nodeScene()->orientation()) {
-    case Qt::Horizontal:
-        return pointsC1C2Horizontal();
-        break;
-
-    case Qt::Vertical:
-        return pointsC1C2Vertical();
-        break;
-    }
-
-    throw std::logic_error("Unreachable code after switch statement");
+    return computeControlPoints(nodeScene()->orientation());
 }
 
-std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2Horizontal() const
+std::pair<QPointF, QPointF> ConnectionGraphicsObject::computeControlPoints(
+    Qt::Orientation orientation) const
 {
     double const defaultOffset = 200;
 
-    double xDistance = _in.x() - _out.x();
+    // In horizontal mode the primary axis is X; in vertical mode it is Y.
+    auto primary = [&](QPointF const &p) {
+        return orientation == Qt::Horizontal ? p.x() : p.y();
+    };
+    auto secondary = [&](QPointF const &p) {
+        return orientation == Qt::Horizontal ? p.y() : p.x();
+    };
 
-    double horizontalOffset = qMin(defaultOffset, std::abs(xDistance));
+    double primaryDistance = primary(_in) - primary(_out);
 
-    double verticalOffset = 0;
+    double primaryOffset = qMin(defaultOffset, std::abs(primaryDistance));
 
-    double ratioX = 0.5;
+    double secondaryOffset = 0;
 
-    if (xDistance <= 0) {
-        double yDistance = _in.y() - _out.y() + 20;
+    double ratio = 0.5;
 
-        double vector = yDistance < 0 ? -1.0 : 1.0;
+    if (primaryDistance <= 0) {
+        double secDistance = secondary(_in) - secondary(_out) + 20;
 
-        verticalOffset = qMin(defaultOffset, std::abs(yDistance)) * vector;
+        double vector = secDistance < 0 ? -1.0 : 1.0;
 
-        ratioX = 1.0;
+        secondaryOffset = qMin(defaultOffset, std::abs(secDistance)) * vector;
+
+        ratio = 1.0;
     }
 
-    horizontalOffset *= ratioX;
+    primaryOffset *= ratio;
 
-    QPointF c1(_out.x() + horizontalOffset, _out.y() + verticalOffset);
-
-    QPointF c2(_in.x() - horizontalOffset, _in.y() - verticalOffset);
-
-    return std::make_pair(c1, c2);
-}
-
-std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2Vertical() const
-{
-    double const defaultOffset = 200;
-
-    double yDistance = _in.y() - _out.y();
-
-    double verticalOffset = qMin(defaultOffset, std::abs(yDistance));
-
-    double horizontalOffset = 0;
-
-    double ratioY = 0.5;
-
-    if (yDistance <= 0) {
-        double xDistance = _in.x() - _out.x() + 20;
-
-        double vector = xDistance < 0 ? -1.0 : 1.0;
-
-        horizontalOffset = qMin(defaultOffset, std::abs(xDistance)) * vector;
-
-        ratioY = 1.0;
+    double hOff, vOff;
+    if (orientation == Qt::Horizontal) {
+        hOff = primaryOffset;
+        vOff = secondaryOffset;
+    } else {
+        hOff = secondaryOffset;
+        vOff = primaryOffset;
     }
 
-    verticalOffset *= ratioY;
-
-    QPointF c1(_out.x() + horizontalOffset, _out.y() + verticalOffset);
-
-    QPointF c2(_in.x() - horizontalOffset, _in.y() - verticalOffset);
+    QPointF c1(_out.x() + hOff, _out.y() + vOff);
+    QPointF c2(_in.x() - hOff, _in.y() - vOff);
 
     return std::make_pair(c1, c2);
 }

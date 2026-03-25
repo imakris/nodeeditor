@@ -512,22 +512,28 @@ std::weak_ptr<NodeGroup> BasicGraphicsScene::createGroup(std::vector<NodeGraphic
     return groupWeakPtr;
 }
 
-std::vector<NodeGraphicsObject *> BasicGraphicsScene::selectedNodes() const
+namespace {
+template<typename T>
+std::vector<T *> selectedItemsOfType(QGraphicsScene const *scene)
 {
-    QList<QGraphicsItem *> graphicsItems = selectedItems();
+    QList<QGraphicsItem *> graphicsItems = scene->selectedItems();
 
-    std::vector<NodeGraphicsObject *> result;
+    std::vector<T *> result;
     result.reserve(graphicsItems.size());
 
     for (QGraphicsItem *item : graphicsItems) {
-        auto ngo = qgraphicsitem_cast<NodeGraphicsObject *>(item);
-
-        if (ngo) {
-            result.push_back(ngo);
+        if (auto typed = qgraphicsitem_cast<T *>(item)) {
+            result.push_back(typed);
         }
     }
 
     return result;
+}
+} // namespace
+
+std::vector<NodeGraphicsObject *> BasicGraphicsScene::selectedNodes() const
+{
+    return selectedItemsOfType<NodeGraphicsObject>(this);
 }
 
 std::vector<GroupGraphicsObject *> BasicGraphicsScene::selectedGroups() const
@@ -535,20 +541,7 @@ std::vector<GroupGraphicsObject *> BasicGraphicsScene::selectedGroups() const
     if (!_groupingEnabled)
         return {};
 
-    QList<QGraphicsItem *> graphicsItems = selectedItems();
-
-    std::vector<GroupGraphicsObject *> result;
-    result.reserve(graphicsItems.size());
-
-    for (QGraphicsItem *item : graphicsItems) {
-        auto ngo = qgraphicsitem_cast<GroupGraphicsObject *>(item);
-
-        if (ngo) {
-            result.push_back(ngo);
-        }
-    }
-
-    return result;
+    return selectedItemsOfType<GroupGraphicsObject>(this);
 }
 
 void BasicGraphicsScene::addNodeToGroup(NodeId nodeId, GroupId groupId)
