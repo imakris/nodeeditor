@@ -77,7 +77,6 @@ set(CPP_SOURCE_FILES
   src/DefaultHorizontalNodeGeometry.cpp
   src/DefaultNodePainter.cpp
   src/DefaultVerticalNodeGeometry.cpp
-  src/Definitions.cpp
   src/GraphicsView.cpp
   src/GraphicsViewStyle.cpp
   src/NodeConnectionInteraction.cpp
@@ -125,7 +124,6 @@ set(HPP_HEADER_FILES
   include/QtNodes/internal/NodeStyle.hpp
   include/QtNodes/internal/OperatingSystem.hpp
   include/QtNodes/internal/QStringStdHash.hpp
-  include/QtNodes/internal/QUuidStdHash.hpp
   include/QtNodes/internal/Serializable.hpp
   include/QtNodes/internal/SerializationValidation.hpp
   include/QtNodes/internal/Style.hpp

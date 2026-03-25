@@ -29,9 +29,6 @@ public:
     QRect resizeHandleRect(NodeId const nodeId) const override;
 
 private:
-    /// Finds
-    unsigned int maxHorizontalPortsExtent(NodeId const nodeId) const;
-
     unsigned int portCaptionsHeight(NodeId const nodeId, PortType const portType) const;
 };
 

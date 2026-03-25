@@ -50,20 +50,21 @@ QRectF DefaultNodeGeometryBase::captionRect(NodeId const nodeId) const
     return _boldFontMetrics.boundingRect(name);
 }
 
+QString DefaultNodeGeometryBase::portLabelText(NodeId const nodeId,
+                                               PortType const portType,
+                                               PortIndex const portIndex) const
+{
+    if (_graphModel.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
+        return _graphModel.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
+    }
+    return _graphModel.portData<NodeDataType>(nodeId, portType, portIndex, PortRole::DataType).name;
+}
+
 QRectF DefaultNodeGeometryBase::portTextRect(NodeId const nodeId,
                                              PortType const portType,
                                              PortIndex const portIndex) const
 {
-    QString s;
-    if (_graphModel.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
-        s = _graphModel.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
-    } else {
-        auto portData = _graphModel.portData(nodeId, portType, portIndex, PortRole::DataType);
-
-        s = portData.value<NodeDataType>().name;
-    }
-
-    return _fontMetrics.boundingRect(s);
+    return _fontMetrics.boundingRect(portLabelText(nodeId, portType, portIndex));
 }
 
 unsigned int DefaultNodeGeometryBase::maxPortsExtent(NodeId const nodeId) const
@@ -86,18 +87,7 @@ unsigned int DefaultNodeGeometryBase::maxPortsTextAdvance(NodeId const nodeId,
     size_t const n = _graphModel.nodeData(nodeId, portCountRole(portType)).toUInt();
 
     for (PortIndex portIndex = 0ul; portIndex < n; ++portIndex) {
-        QString name;
-
-        if (_graphModel.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
-            name = _graphModel.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
-        } else {
-            NodeDataType portData = _graphModel.portData<NodeDataType>(nodeId,
-                                                                       portType,
-                                                                       portIndex,
-                                                                       PortRole::DataType);
-
-            name = portData.name;
-        }
+        QString const name = portLabelText(nodeId, portType, portIndex);
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         width = std::max(unsigned(_fontMetrics.horizontalAdvance(name)), width);
