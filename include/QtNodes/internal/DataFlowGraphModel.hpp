@@ -12,6 +12,8 @@
 
 #include <memory>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace QtNodes {
 
@@ -106,6 +108,9 @@ Q_SIGNALS:
     void inPortDataWasSet(NodeId const, PortType const, PortIndex const);
 
 private:
+    using Connection_set = std::unordered_set<ConnectionId>;
+    using Connections_by_port = std::unordered_map<PortIndex, Connection_set>;
+
     NodeId newNodeId() override
     {
         if (_nextNodeId == InvalidNodeId) {
@@ -116,6 +121,10 @@ private:
     }
 
     void connectDelegateModel(NodeDelegateModel *model, NodeId nodeId);
+
+    void indexConnection(ConnectionId const connectionId);
+
+    void unindexConnection(ConnectionId const connectionId);
 
     void sendConnectionCreation(ConnectionId const connectionId);
 
@@ -145,6 +154,12 @@ private:
     std::unordered_map<NodeId, std::unique_ptr<NodeDelegateModel>> _models;
 
     std::unordered_set<ConnectionId> _connectivity;
+
+    std::unordered_map<NodeId, Connection_set> _nodeConnections;
+
+    std::unordered_map<NodeId, Connections_by_port> _inConnectionsByPort;
+
+    std::unordered_map<NodeId, Connections_by_port> _outConnectionsByPort;
 
     mutable std::unordered_map<NodeId, NodeGeometryData> _nodeGeometryData;
 };

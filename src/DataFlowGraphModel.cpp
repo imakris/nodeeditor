@@ -43,33 +43,35 @@ std::unordered_set<NodeId> DataFlowGraphModel::allNodeIds() const
 
 std::unordered_set<ConnectionId> DataFlowGraphModel::allConnectionIds(NodeId const nodeId) const
 {
-    std::unordered_set<ConnectionId> result;
+    auto it = _nodeConnections.find(nodeId);
+    if (it == _nodeConnections.end()) {
+        return {};
+    }
 
-    std::copy_if(_connectivity.begin(),
-                 _connectivity.end(),
-                 std::inserter(result, std::end(result)),
-                 [&nodeId](ConnectionId const &cid) {
-                     return cid.inNodeId == nodeId || cid.outNodeId == nodeId;
-                 });
-
-    return result;
+    return it->second;
 }
 
 std::unordered_set<ConnectionId> DataFlowGraphModel::connections(NodeId nodeId,
                                                                  PortType portType,
                                                                  PortIndex portIndex) const
 {
-    std::unordered_set<ConnectionId> result;
+    if (portType == PortType::None) {
+        return {};
+    }
 
-    std::copy_if(_connectivity.begin(),
-                 _connectivity.end(),
-                 std::inserter(result, std::end(result)),
-                 [&portType, &portIndex, &nodeId](ConnectionId const &cid) {
-                     return (getNodeId(portType, cid) == nodeId
-                             && getPortIndex(portType, cid) == portIndex);
-                 });
+    auto const &connectionsByPort = (portType == PortType::In) ? _inConnectionsByPort
+                                                                : _outConnectionsByPort;
+    auto nodeIt = connectionsByPort.find(nodeId);
+    if (nodeIt == connectionsByPort.end()) {
+        return {};
+    }
 
-    return result;
+    auto portIt = nodeIt->second.find(portIndex);
+    if (portIt == nodeIt->second.end()) {
+        return {};
+    }
+
+    return portIt->second;
 }
 
 bool DataFlowGraphModel::connectionExists(ConnectionId const connectionId) const
@@ -184,6 +186,7 @@ void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
     }
 
     _connectivity.insert(connectionId);
+    indexConnection(connectionId);
 
     sendConnectionCreation(connectionId);
 
@@ -234,6 +237,58 @@ void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId n
     connect(model, &NodeDelegateModel::requestNodeUpdate, this, [nodeId, this]() {
         Q_EMIT nodeUpdated(nodeId);
     });
+}
+
+void DataFlowGraphModel::indexConnection(ConnectionId const connectionId)
+{
+    _nodeConnections[connectionId.outNodeId].insert(connectionId);
+    _nodeConnections[connectionId.inNodeId].insert(connectionId);
+    _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
+    _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
+}
+
+void DataFlowGraphModel::unindexConnection(ConnectionId const connectionId)
+{
+    auto erase_from_node = [&](NodeId nodeId) {
+        auto nodeIt = _nodeConnections.find(nodeId);
+        if (nodeIt == _nodeConnections.end()) {
+            return;
+        }
+
+        nodeIt->second.erase(connectionId);
+        if (nodeIt->second.empty()) {
+            _nodeConnections.erase(nodeIt);
+        }
+    };
+
+    auto erase_from_port_map =
+        [&](std::unordered_map<NodeId, Connections_by_port> &connectionsByPort,
+            NodeId nodeId,
+            PortIndex portIndex) {
+            auto nodeIt = connectionsByPort.find(nodeId);
+            if (nodeIt == connectionsByPort.end()) {
+                return;
+            }
+
+            auto portIt = nodeIt->second.find(portIndex);
+            if (portIt == nodeIt->second.end()) {
+                return;
+            }
+
+            portIt->second.erase(connectionId);
+            if (portIt->second.empty()) {
+                nodeIt->second.erase(portIt);
+            }
+
+            if (nodeIt->second.empty()) {
+                connectionsByPort.erase(nodeIt);
+            }
+        };
+
+    erase_from_node(connectionId.outNodeId);
+    erase_from_node(connectionId.inNodeId);
+    erase_from_port_map(_outConnectionsByPort, connectionId.outNodeId, connectionId.outPortIndex);
+    erase_from_port_map(_inConnectionsByPort, connectionId.inNodeId, connectionId.inPortIndex);
 }
 
 void DataFlowGraphModel::sendConnectionCreation(ConnectionId const connectionId)
@@ -534,6 +589,7 @@ bool DataFlowGraphModel::deleteConnection(ConnectionId const connectionId)
     }
 
     if (disconnected) {
+        unindexConnection(connectionId);
         sendConnectionDeletion(connectionId);
 
         propagateEmptyDataTo(getNodeId(PortType::In, connectionId),
