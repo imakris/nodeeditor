@@ -173,44 +173,16 @@ QRect DefaultVerticalNodeGeometry::resizeHandleRect(NodeId const nodeId) const
     return QRect(size.width() - rectSize, size.height() - rectSize, rectSize, rectSize);
 }
 
-unsigned int DefaultVerticalNodeGeometry::maxHorizontalPortsExtent(NodeId const nodeId) const
-{
-    return maxPortsExtent(nodeId);
-}
-
 unsigned int DefaultVerticalNodeGeometry::portCaptionsHeight(NodeId const nodeId,
                                                              PortType const portType) const
 {
-    unsigned int h = 0;
-
-    switch (portType) {
-    case PortType::In: {
-        PortCount nInPorts = _graphModel.nodeData<PortCount>(nodeId, NodeRole::InPortCount);
-        for (PortIndex i = 0; i < nInPorts; ++i) {
-            if (_graphModel.portData<bool>(nodeId, PortType::In, i, PortRole::CaptionVisible)) {
-                h += _portSpacing;
-                break;
-            }
+    PortCount const n = _graphModel.nodeData<PortCount>(nodeId, portCountRole(portType));
+    for (PortIndex i = 0; i < n; ++i) {
+        if (_graphModel.portData<bool>(nodeId, portType, i, PortRole::CaptionVisible)) {
+            return _portSpacing;
         }
-        break;
     }
-
-    case PortType::Out: {
-        PortCount nOutPorts = _graphModel.nodeData<PortCount>(nodeId, NodeRole::OutPortCount);
-        for (PortIndex i = 0; i < nOutPorts; ++i) {
-            if (_graphModel.portData<bool>(nodeId, PortType::Out, i, PortRole::CaptionVisible)) {
-                h += _portSpacing;
-                break;
-            }
-        }
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    return h;
+    return 0;
 }
 
 } // namespace QtNodes

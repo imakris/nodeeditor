@@ -27,6 +27,11 @@ public:
     QRectF captionRect(NodeId const nodeId) const override;
 
 protected:
+    /// Returns the display text for a port (caption if visible, else data type name).
+    QString portLabelText(NodeId const nodeId,
+                          PortType const portType,
+                          PortIndex const portIndex) const;
+
     QRectF portTextRect(NodeId const nodeId,
                         PortType const portType,
                         PortIndex const portIndex) const;

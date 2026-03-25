@@ -26,10 +26,6 @@ public:
     QPointF widgetPosition(NodeId const nodeId) const override;
 
     QRect resizeHandleRect(NodeId const nodeId) const override;
-
-private:
-    /// Finds max number of ports and multiplies by (a port height + interval)
-    unsigned int maxVerticalPortsExtent(NodeId const nodeId) const;
 };
 
 } // namespace QtNodes

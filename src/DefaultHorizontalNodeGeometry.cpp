@@ -14,7 +14,7 @@ DefaultHorizontalNodeGeometry::DefaultHorizontalNodeGeometry(AbstractGraphModel 
 
 void DefaultHorizontalNodeGeometry::recomputeSize(NodeId const nodeId) const
 {
-    unsigned int height = maxVerticalPortsExtent(nodeId);
+    unsigned int height = maxPortsExtent(nodeId);
 
     if (auto w = _graphModel.nodeData<QWidget *>(nodeId, NodeRole::Widget)) {
         height = std::max(height, static_cast<unsigned int>(w->height()));
@@ -151,11 +151,6 @@ QRect DefaultHorizontalNodeGeometry::resizeHandleRect(NodeId const nodeId) const
     unsigned int rectSize = 7;
 
     return QRect(size.width() - _portSpacing, size.height() - _portSpacing, rectSize, rectSize);
-}
-
-unsigned int DefaultHorizontalNodeGeometry::maxVerticalPortsExtent(NodeId const nodeId) const
-{
-    return maxPortsExtent(nodeId);
 }
 
 } // namespace QtNodes
