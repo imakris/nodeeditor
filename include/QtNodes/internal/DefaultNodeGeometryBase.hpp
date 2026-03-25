@@ -37,7 +37,7 @@ protected:
 
 protected:
     mutable unsigned int _portSize;
-    unsigned int _portSpasing;
+    unsigned int _portSpacing;
     mutable QFontMetrics _fontMetrics;
     mutable QFontMetrics _boldFontMetrics;
 };

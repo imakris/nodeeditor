@@ -24,8 +24,8 @@ void DefaultHorizontalNodeGeometry::recomputeSize(NodeId const nodeId) const
 
     height += capRect.height();
 
-    height += _portSpasing; // space above caption
-    height += _portSpasing; // space below caption
+    height += _portSpacing; // space above caption
+    height += _portSpacing; // space below caption
 
     QVariant var = _graphModel.nodeData(nodeId, NodeRole::ProcessingStatus);
     auto processingStatusValue = var.value<int>();
@@ -36,13 +36,13 @@ void DefaultHorizontalNodeGeometry::recomputeSize(NodeId const nodeId) const
     unsigned int inPortWidth = maxPortsTextAdvance(nodeId, PortType::In);
     unsigned int outPortWidth = maxPortsTextAdvance(nodeId, PortType::Out);
 
-    unsigned int width = inPortWidth + outPortWidth + 4 * _portSpasing;
+    unsigned int width = inPortWidth + outPortWidth + 4 * _portSpacing;
 
     if (auto w = _graphModel.nodeData<QWidget *>(nodeId, NodeRole::Widget)) {
         width += w->width();
     }
 
-    width = std::max(width, static_cast<unsigned int>(capRect.width()) + 2 * _portSpasing);
+    width = std::max(width, static_cast<unsigned int>(capRect.width()) + 2 * _portSpacing);
 
     QSize size(width, height);
 
@@ -53,14 +53,14 @@ QPointF DefaultHorizontalNodeGeometry::portPosition(NodeId const nodeId,
                                                     PortType const portType,
                                                     PortIndex const portIndex) const
 {
-    unsigned int const step = _portSize + _portSpasing;
+    unsigned int const step = _portSize + _portSpacing;
 
     QPointF result;
 
     double totalHeight = 0.0;
 
     totalHeight += captionRect(nodeId).height();
-    totalHeight += _portSpasing;
+    totalHeight += _portSpacing;
 
     totalHeight += step * portIndex;
     totalHeight += step / 2.0;
@@ -103,11 +103,11 @@ QPointF DefaultHorizontalNodeGeometry::portTextPosition(NodeId const nodeId,
 
     switch (portType) {
     case PortType::In:
-        p.setX(_portSpasing);
+        p.setX(_portSpacing);
         break;
 
     case PortType::Out:
-        p.setX(size.width() - _portSpasing - rect.width());
+        p.setX(size.width() - _portSpacing - rect.width());
         break;
 
     default:
@@ -121,7 +121,7 @@ QPointF DefaultHorizontalNodeGeometry::captionPosition(NodeId const nodeId) cons
 {
     QSize size = _graphModel.nodeData<QSize>(nodeId, NodeRole::Size);
     return QPointF(0.5 * (size.width() - captionRect(nodeId).width()),
-                   0.5 * _portSpasing + captionRect(nodeId).height());
+                   0.5 * _portSpacing + captionRect(nodeId).height());
 }
 
 QPointF DefaultHorizontalNodeGeometry::widgetPosition(NodeId const nodeId) const
@@ -134,10 +134,10 @@ QPointF DefaultHorizontalNodeGeometry::widgetPosition(NodeId const nodeId) const
         // If the widget wants to use as much vertical space as possible,
         // place it immediately after the caption.
         if (w->sizePolicy().verticalPolicy() & QSizePolicy::ExpandFlag) {
-            return QPointF(2.0 * _portSpasing + maxPortsTextAdvance(nodeId, PortType::In),
-                           _portSpasing + captionHeight);
+            return QPointF(2.0 * _portSpacing + maxPortsTextAdvance(nodeId, PortType::In),
+                           _portSpacing + captionHeight);
         } else {
-            return QPointF(2.0 * _portSpasing + maxPortsTextAdvance(nodeId, PortType::In),
+            return QPointF(2.0 * _portSpacing + maxPortsTextAdvance(nodeId, PortType::In),
                            (captionHeight + size.height() - w->height()) / 2.0);
         }
     }
@@ -150,7 +150,7 @@ QRect DefaultHorizontalNodeGeometry::resizeHandleRect(NodeId const nodeId) const
 
     unsigned int rectSize = 7;
 
-    return QRect(size.width() - _portSpasing, size.height() - _portSpasing, rectSize, rectSize);
+    return QRect(size.width() - _portSpacing, size.height() - _portSpacing, rectSize, rectSize);
 }
 
 unsigned int DefaultHorizontalNodeGeometry::maxVerticalPortsExtent(NodeId const nodeId) const

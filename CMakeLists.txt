@@ -4,7 +4,7 @@ cmake_policy(SET CMP0072 NEW) # new in 3.11. The NEW behavior for this policy is
 cmake_policy(SET CMP0068 NEW) # new in 3.9. The NEW behavior of this policy is to ignore the RPATH settings for install_name on macOS.
 
 
-project(QtNodesLibrary CXX)
+project(QtNodesLibrary VERSION 3.0.16 LANGUAGES CXX)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -191,14 +191,14 @@ if(NOT "${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
   )
 endif()
 
-if(QT_NODES_DEVELOPER_DEFAULTS)
-  target_compile_features(QtNodes PUBLIC cxx_std_14)
-  set_target_properties(QtNodes PROPERTIES CXX_EXTENSIONS OFF)
-endif()
+target_compile_features(QtNodes PUBLIC cxx_std_14)
+set_target_properties(QtNodes PROPERTIES CXX_EXTENSIONS OFF)
 
 
 set_target_properties(QtNodes
   PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
@@ -236,7 +236,6 @@ set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/QtNodes)
 
 install(TARGETS QtNodes
   EXPORT QtNodesTargets
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -258,7 +257,14 @@ configure_package_config_file(${CMAKE_CURRENT_LIST_DIR}/cmake/QtNodesConfig.cmak
   INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
 )
 
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/QtNodesConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMajorVersion
+)
+
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/QtNodesConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/QtNodesConfigVersion.cmake
   DESTINATION ${INSTALL_CONFIGDIR}
 )

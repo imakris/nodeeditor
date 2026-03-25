@@ -12,7 +12,7 @@ namespace QtNodes {
 DefaultNodeGeometryBase::DefaultNodeGeometryBase(AbstractGraphModel &graphModel)
     : AbstractNodeGeometry(graphModel)
     , _portSize(20)
-    , _portSpasing(10)
+    , _portSpacing(10)
     , _fontMetrics(QFont())
     , _boldFontMetrics(QFont())
 {
@@ -73,7 +73,7 @@ unsigned int DefaultNodeGeometryBase::maxPortsExtent(NodeId const nodeId) const
     PortCount nOutPorts = _graphModel.nodeData<PortCount>(nodeId, NodeRole::OutPortCount);
 
     unsigned int maxNumOfEntries = std::max(nInPorts, nOutPorts);
-    unsigned int step = _portSize + _portSpasing;
+    unsigned int step = _portSize + _portSpacing;
 
     return step * maxNumOfEntries;
 }
