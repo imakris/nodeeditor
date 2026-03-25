@@ -59,8 +59,8 @@ void ConnectionGraphicsObject::initializePosition()
     if (_connectionState.requiredPort() != PortType::None) {
         PortType attachedPort = oppositePort(_connectionState.requiredPort());
 
-        PortIndex portIndex = getPortIndex(attachedPort, _connectionId);
-        NodeId nodeId = getNodeId(attachedPort, _connectionId);
+        PortIndex portIndex = connectionPortIndex(attachedPort, _connectionId);
+        NodeId nodeId = connectionNodeId(attachedPort, _connectionId);
 
         NodeGraphicsObject *ngo = nodeScene()->nodeGraphicsObject(nodeId);
 
@@ -198,7 +198,7 @@ void ConnectionGraphicsObject::move()
     QPointF newIn = _in;
 
     auto moveEnd = [this](ConnectionId cId, PortType portType, QPointF &endPoint) {
-        NodeId nodeId = getNodeId(portType, cId);
+        NodeId nodeId = connectionNodeId(portType, cId);
 
         if (nodeId == InvalidNodeId)
             return;
@@ -210,7 +210,7 @@ void ConnectionGraphicsObject::move()
 
             QPointF scenePos = geometry.portScenePosition(nodeId,
                                                           portType,
-                                                          getPortIndex(portType, cId),
+                                                          connectionPortIndex(portType, cId),
                                                           ngo->sceneTransform());
 
             endPoint = sceneTransform().inverted().map(scenePos);

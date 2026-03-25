@@ -81,7 +81,7 @@ bool NodeConnectionInteraction::disconnect(PortType portToDisconnect) const
 
     QPointF scenePos = geometry.portScenePosition(_ngo.nodeId(),
                                                   portToDisconnect,
-                                                  getPortIndex(portToDisconnect, connectionId),
+                                                  connectionPortIndex(portToDisconnect, connectionId),
                                                   _ngo.sceneTransform());
 
     // Converted to "draft" connection with the new incomplete id.
@@ -95,12 +95,12 @@ bool NodeConnectionInteraction::disconnect(PortType portToDisconnect) const
     draftConnection->setEndPoint(portToDisconnect, looseEndPos);
 
      //Repaint connection points.
-    NodeId connectedNodeId = getNodeId(oppositePort(portToDisconnect), connectionId);
+    NodeId connectedNodeId = connectionNodeId(oppositePort(portToDisconnect), connectionId);
     if (auto *connectedNode = _scene.nodeGraphicsObject(connectedNodeId)) {
         connectedNode->update();
     }
 
-    NodeId disconnectedNodeId = getNodeId(portToDisconnect, connectionId);
+    NodeId disconnectedNodeId = connectionNodeId(portToDisconnect, connectionId);
     if (auto *disconnectedNode = _scene.nodeGraphicsObject(disconnectedNodeId)) {
         disconnectedNode->update();
     }

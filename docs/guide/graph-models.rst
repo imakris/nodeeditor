@@ -20,9 +20,6 @@ Your model must implement these pure virtual methods:
    class MyGraphModel : public QtNodes::AbstractGraphModel
    {
    public:
-       // ID generation
-       NodeId newNodeId() override;
-
        // Node queries
        NodeIdSet const &allNodeIds() const override;
        bool nodeExists(NodeId) const override;
@@ -44,6 +41,10 @@ Your model must implement these pure virtual methods:
        // Port queries
        QVariant portData(NodeId, PortType, PortIndex, PortRole) const override;
        bool setPortData(NodeId, PortType, PortIndex, QVariant, PortRole) override;
+
+   protected:
+       // ID generation
+       NodeId newNodeId() override;
    };
 
 Implementing Node Management
@@ -240,6 +241,12 @@ Implement ``portData()`` for port-specific information:
    * - ``ConnectionPolicy``
      - ``ConnectionPolicy``
      - ``One`` (single connection) or ``Many``
+   * - ``Caption``
+     - ``QString``
+     - Port label text
+   * - ``CaptionVisible``
+     - ``bool``
+     - Whether to show the label
 
 .. note::
 
@@ -247,12 +254,6 @@ Implement ``portData()`` for port-specific information:
    references to storage owned by the model. Implementations must keep those
    containers alive for the duration of the call site rather than constructing
    and returning temporaries.
-   * - ``Caption``
-     - ``QString``
-     - Port label text
-   * - ``CaptionVisible``
-     - ``bool``
-     - Whether to show the label
 
 Required Signals
 ----------------

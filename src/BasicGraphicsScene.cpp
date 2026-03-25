@@ -254,7 +254,7 @@ void BasicGraphicsScene::traverseGraphAndPopulateGraphicsObjects()
 void BasicGraphicsScene::updateAttachedNodes(ConnectionId const connectionId,
                                              PortType const portType)
 {
-    auto node = nodeGraphicsObject(getNodeId(portType, connectionId));
+    auto node = nodeGraphicsObject(connectionNodeId(portType, connectionId));
 
     if (node) {
         node->updateValidationTooltip();

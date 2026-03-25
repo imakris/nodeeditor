@@ -35,9 +35,6 @@ First, we need a class to store our graph data. Create ``SimpleGraphModel.hpp``:
    {
        Q_OBJECT
    public:
-       // Required: Generate unique node IDs
-       QtNodes::NodeId newNodeId() override { return _nextId++; }
-
        // Required: Return all node IDs
        NodeIdSet const &allNodeIds() const override;
 
@@ -45,6 +42,10 @@ First, we need a class to store our graph data. Create ``SimpleGraphModel.hpp``:
        ConnectionIdSet const &allConnectionIds(QtNodes::NodeId) const override;
 
        // ... (see full implementation in examples/simple_graph_model)
+
+   protected:
+       // Required: Generate unique node IDs
+       QtNodes::NodeId newNodeId() override { return _nextId++; }
 
    private:
        QtNodes::NodeId _nextId = 0;
