@@ -1,6 +1,7 @@
 #include "DataFlowGraphModel.hpp"
 
 #include "ConnectionIdHash.hpp"
+#include "ConnectionIdUtils.hpp"
 #include "Definitions.hpp"
 
 #include <QJsonArray>
@@ -66,39 +67,7 @@ NodeId DataFlowGraphModel::addNode(QString const nodeType)
     if (model) {
         NodeId newId = newNodeId();
 
-        connect(model.get(),
-                &NodeDelegateModel::dataUpdated,
-                [newId, this](PortIndex const portIndex) {
-                    onOutPortDataUpdated(newId, portIndex);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsAboutToBeDeleted,
-                this,
-                [newId, this](PortType const portType, PortIndex const first, PortIndex const last) {
-                    portsAboutToBeDeleted(newId, portType, first, last);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsDeleted,
-                this,
-                &DataFlowGraphModel::portsDeleted);
-
-        connect(model.get(),
-                &NodeDelegateModel::portsAboutToBeInserted,
-                this,
-                [newId, this](PortType const portType, PortIndex const first, PortIndex const last) {
-                    portsAboutToBeInserted(newId, portType, first, last);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsInserted,
-                this,
-                &DataFlowGraphModel::portsInserted);
-
-        connect(model.get(), &NodeDelegateModel::requestNodeUpdate, this, [newId, this]() {
-            Q_EMIT nodeUpdated(newId);
-        });
+        connectDelegateModel(model.get(), newId);
 
         _models[newId] = std::move(model);
 
@@ -120,10 +89,7 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
     // Check port bounds, i.e. that we do not connect non-existing port numbers
     auto checkPortBounds = [&](PortType const portType) {
         NodeId const nodeId = getNodeId(portType, connectionId);
-        auto portCountRole = (portType == PortType::Out) ? NodeRole::OutPortCount
-                                                         : NodeRole::InPortCount;
-
-        std::size_t const portCount = nodeData(nodeId, portCountRole).toUInt();
+        std::size_t const portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
 
         return getPortIndex(portType, connectionId) < portCount;
     };
@@ -201,6 +167,43 @@ void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
                 connectionId.inPortIndex,
                 portDataToPropagate,
                 PortRole::Data);
+}
+
+void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId nodeId)
+{
+    connect(model,
+            &NodeDelegateModel::dataUpdated,
+            [nodeId, this](PortIndex const portIndex) {
+                onOutPortDataUpdated(nodeId, portIndex);
+            });
+
+    connect(model,
+            &NodeDelegateModel::portsAboutToBeDeleted,
+            this,
+            [nodeId, this](PortType const portType, PortIndex const first, PortIndex const last) {
+                portsAboutToBeDeleted(nodeId, portType, first, last);
+            });
+
+    connect(model,
+            &NodeDelegateModel::portsDeleted,
+            this,
+            &DataFlowGraphModel::portsDeleted);
+
+    connect(model,
+            &NodeDelegateModel::portsAboutToBeInserted,
+            this,
+            [nodeId, this](PortType const portType, PortIndex const first, PortIndex const last) {
+                portsAboutToBeInserted(nodeId, portType, first, last);
+            });
+
+    connect(model,
+            &NodeDelegateModel::portsInserted,
+            this,
+            &DataFlowGraphModel::portsInserted);
+
+    connect(model, &NodeDelegateModel::requestNodeUpdate, this, [nodeId, this]() {
+        Q_EMIT nodeUpdated(nodeId);
+    });
 }
 
 void DataFlowGraphModel::sendConnectionCreation(ConnectionId const connectionId)
@@ -433,8 +436,6 @@ bool DataFlowGraphModel::setPortData(
 {
     Q_UNUSED(nodeId);
 
-    QVariant result;
-
     auto it = _models.find(nodeId);
     if (it == _models.end())
         return false;
@@ -558,41 +559,7 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
     std::unique_ptr<NodeDelegateModel> model = _registry->create(delegateModelName);
 
     if (model) {
-        connect(model.get(),
-                &NodeDelegateModel::dataUpdated,
-                [restoredNodeId, this](PortIndex const portIndex) {
-                    onOutPortDataUpdated(restoredNodeId, portIndex);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsAboutToBeDeleted,
-                this,
-                [restoredNodeId,
-                 this](PortType const portType, PortIndex const first, PortIndex const last) {
-                    portsAboutToBeDeleted(restoredNodeId, portType, first, last);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsDeleted,
-                this,
-                &DataFlowGraphModel::portsDeleted);
-
-        connect(model.get(),
-                &NodeDelegateModel::portsAboutToBeInserted,
-                this,
-                [restoredNodeId,
-                 this](PortType const portType, PortIndex const first, PortIndex const last) {
-                    portsAboutToBeInserted(restoredNodeId, portType, first, last);
-                });
-
-        connect(model.get(),
-                &NodeDelegateModel::portsInserted,
-                this,
-                &DataFlowGraphModel::portsInserted);
-
-        connect(model.get(), &NodeDelegateModel::requestNodeUpdate, this, [restoredNodeId, this]() {
-            Q_EMIT nodeUpdated(restoredNodeId);
-        });
+        connectDelegateModel(model.get(), restoredNodeId);
 
         _models[restoredNodeId] = std::move(model);
 

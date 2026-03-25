@@ -59,12 +59,6 @@ public:
     NodeGraphicsObject &nodeGraphicsObject() { return _ngo; }
 
 private:
-    PortType connectionRequiredPort() const;
-
-    QPointF connectionEndScenePosition(PortType) const;
-
-    QPointF nodePortScenePosition(PortType portType, PortIndex portIndex) const;
-
     PortIndex nodePortIndexUnderScenePoint(PortType portType, QPointF const &p) const;
 
 private:

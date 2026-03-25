@@ -9,7 +9,6 @@
 #include <functional>
 
 #include <QtCore/QString>
-#include <QtCore/QVariant>
 
 namespace std {
 template<>

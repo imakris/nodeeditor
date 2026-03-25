@@ -1,51 +1,20 @@
 #include "DefaultVerticalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
-#include "NodeRenderingUtils.hpp"
-#include "NodeData.hpp"
 
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
 
-#include <optional>
-
 namespace QtNodes {
 
 DefaultVerticalNodeGeometry::DefaultVerticalNodeGeometry(AbstractGraphModel &graphModel)
-    : AbstractNodeGeometry(graphModel)
-    , _portSize(20)
-    , _portSpasing(10)
-    , _fontMetrics(QFont())
-    , _boldFontMetrics(QFont())
-{
-    QFont f;
-    f.setBold(true);
-    _boldFontMetrics = QFontMetrics(f);
-
-    _portSize = _fontMetrics.height();
-}
-
-QRectF DefaultVerticalNodeGeometry::boundingRect(NodeId const nodeId) const
-{
-    QSize s = size(nodeId);
-    std::optional<NodeStyle> fallback_style;
-    NodeStyle const &style = node_rendering::resolved_node_style(_graphModel, nodeId, fallback_style);
-    QMarginsF const margins = node_rendering::node_visual_margins(style.ShadowEnabled);
-
-    QRectF r(QPointF(0, 0), s);
-
-    return r.marginsAdded(margins);
-}
-
-QSize DefaultVerticalNodeGeometry::size(NodeId const nodeId) const
-{
-    return _graphModel.nodeData<QSize>(nodeId, NodeRole::Size);
-}
+    : DefaultNodeGeometryBase(graphModel)
+{}
 
 void DefaultVerticalNodeGeometry::recomputeSize(NodeId const nodeId) const
 {
-    unsigned int height = _portSpasing; // maxHorizontalPortsExtent(nodeId);
+    unsigned int height = _portSpasing;
 
     if (auto w = _graphModel.nodeData<QWidget *>(nodeId, NodeRole::Widget)) {
         height = std::max(height, static_cast<unsigned int>(w->height()));
@@ -164,16 +133,6 @@ QPointF DefaultVerticalNodeGeometry::portTextPosition(NodeId const nodeId,
     return p;
 }
 
-QRectF DefaultVerticalNodeGeometry::captionRect(NodeId const nodeId) const
-{
-    if (!_graphModel.nodeData<bool>(nodeId, NodeRole::CaptionVisible))
-        return QRect();
-
-    QString name = _graphModel.nodeData<QString>(nodeId, NodeRole::Caption);
-
-    return _boldFontMetrics.boundingRect(name);
-}
-
 QPointF DefaultVerticalNodeGeometry::captionPosition(NodeId const nodeId) const
 {
     QSize size = _graphModel.nodeData<QSize>(nodeId, NodeRole::Size);
@@ -214,67 +173,9 @@ QRect DefaultVerticalNodeGeometry::resizeHandleRect(NodeId const nodeId) const
     return QRect(size.width() - rectSize, size.height() - rectSize, rectSize, rectSize);
 }
 
-QRectF DefaultVerticalNodeGeometry::portTextRect(NodeId const nodeId,
-                                                 PortType const portType,
-                                                 PortIndex const portIndex) const
-{
-    QString s;
-    if (_graphModel.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
-        s = _graphModel.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
-    } else {
-        auto portData = _graphModel.portData(nodeId, portType, portIndex, PortRole::DataType);
-
-        s = portData.value<NodeDataType>().name;
-    }
-
-    return _fontMetrics.boundingRect(s);
-}
-
 unsigned int DefaultVerticalNodeGeometry::maxHorizontalPortsExtent(NodeId const nodeId) const
 {
-    PortCount nInPorts = _graphModel.nodeData<PortCount>(nodeId, NodeRole::InPortCount);
-
-    PortCount nOutPorts = _graphModel.nodeData<PortCount>(nodeId, NodeRole::OutPortCount);
-
-    unsigned int maxNumOfEntries = std::max(nInPorts, nOutPorts);
-    unsigned int step = _portSize + _portSpasing;
-
-    return step * maxNumOfEntries;
-}
-
-unsigned int DefaultVerticalNodeGeometry::maxPortsTextAdvance(NodeId const nodeId,
-                                                              PortType const portType) const
-{
-    unsigned int width = 0;
-
-    size_t const n = _graphModel
-                         .nodeData(nodeId,
-                                   (portType == PortType::Out) ? NodeRole::OutPortCount
-                                                               : NodeRole::InPortCount)
-                         .toUInt();
-
-    for (PortIndex portIndex = 0ul; portIndex < n; ++portIndex) {
-        QString name;
-
-        if (_graphModel.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
-            name = _graphModel.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
-        } else {
-            NodeDataType portData = _graphModel.portData<NodeDataType>(nodeId,
-                                                                       portType,
-                                                                       portIndex,
-                                                                       PortRole::DataType);
-
-            name = portData.name;
-        }
-
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-        width = std::max(unsigned(_fontMetrics.horizontalAdvance(name)), width);
-#else
-        width = std::max(unsigned(_fontMetrics.width(name)), width);
-#endif
-    }
-
-    return width;
+    return maxPortsExtent(nodeId);
 }
 
 unsigned int DefaultVerticalNodeGeometry::portCaptionsHeight(NodeId const nodeId,

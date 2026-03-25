@@ -17,12 +17,6 @@
 #define NODE_EDITOR_LOCAL
 #endif
 
-#ifdef __cplusplus
-#define NODE_EDITOR_DEMANGLED extern "C"
-#else
-#define NODE_EDITOR_DEMANGLED
-#endif
-
 #if defined(NODE_EDITOR_SHARED) && !defined(NODE_EDITOR_STATIC)
 #ifdef NODE_EDITOR_EXPORTS
 #define NODE_EDITOR_PUBLIC NODE_EDITOR_EXPORT

@@ -27,8 +27,6 @@ public:
     using RegisteredModelsCategoryMap = std::unordered_map<QString, QString>;
     using CategoriesSet = std::set<QString>;
 
-    //using RegisteredTypeConvertersMap = std::map<TypeConverterId, TypeConverter>;
-
     NodeDelegateModelRegistry() = default;
     ~NodeDelegateModelRegistry() = default;
 
@@ -68,33 +66,6 @@ public:
     }
 
 
-#if 0
-  template<typename ModelType>
-  void
-  registerModel(RegistryItemCreator creator,
-                QString const&      category = "Nodes")
-  {
-    registerModel<ModelType>(std::move(creator), category);
-  }
-
-
-  template <typename ModelCreator>
-  void
-  registerModel(QString const& category, ModelCreator&& creator)
-  {
-    registerModel(std::forward<ModelCreator>(creator), category);
-  }
-
-
-  void
-  registerTypeConverter(TypeConverterId const& id,
-                        TypeConverter          typeConverter)
-  {
-    _registeredTypeConverters[id] = std::move(typeConverter);
-  }
-
-#endif
-
     std::unique_ptr<NodeDelegateModel> create(QString const &modelName);
 
     RegisteredModelCreatorsMap const &registeredModelCreators() const;
@@ -103,22 +74,12 @@ public:
 
     CategoriesSet const &categories() const;
 
-#if 0
-  TypeConverter
-  getTypeConverter(NodeDataType const& d1,
-                   NodeDataType const& d2) const;
-#endif
-
 private:
     RegisteredModelsCategoryMap _registeredModelsCategory;
 
     CategoriesSet _categories;
 
     RegisteredModelCreatorsMap _registeredItemCreators;
-
-#if 0
-  RegisteredTypeConvertersMap _registeredTypeConverters;
-#endif
 
 private:
     // If the registered ModelType class has the static member method

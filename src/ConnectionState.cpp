@@ -5,15 +5,11 @@
 #include "NodeGraphicsObject.hpp"
 
 #include <QtCore/QDebug>
-#include <QtCore/QPointF>
 
 
 namespace QtNodes {
 
-ConnectionState::~ConnectionState()
-{
-    //resetLastHoveredNode();
-}
+ConnectionState::~ConnectionState() = default;
 
 PortType ConnectionState::requiredPort() const
 {

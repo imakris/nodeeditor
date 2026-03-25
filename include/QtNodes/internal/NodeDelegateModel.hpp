@@ -14,7 +14,6 @@
 #include "NodeData.hpp"
 #include "NodeStyle.hpp"
 #include "Serializable.hpp"
-#include <QtGui/QColor>
 
 namespace QtNodes {
 
@@ -48,8 +47,6 @@ enum class NodeProcessingStatus : int {
     Failed = 5,     ///< The last computation ended with an error.
     Partial = 6,    ///< Computation finished incompletely; only partial results are available.
 };
-
-class StyleCollection;
 
 /**
  * The class wraps Node-specific data operations and propagates it to

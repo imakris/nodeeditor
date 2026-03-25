@@ -1,9 +1,8 @@
 #include "AbstractNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "ConnectionIdUtils.hpp"
 #include "StyleCollection.hpp"
-
-#include <QMargins>
 
 #include <cmath>
 
@@ -38,10 +37,7 @@ PortIndex AbstractNodeGeometry::checkPortHit(NodeId const nodeId,
 
     double const tolerance = 2.0 * nodeStyle.ConnectionPointDiameter;
 
-    size_t const n = _graphModel.nodeData<unsigned int>(nodeId,
-                                                        (portType == PortType::Out)
-                                                            ? NodeRole::OutPortCount
-                                                            : NodeRole::InPortCount);
+    size_t const n = _graphModel.nodeData<unsigned int>(nodeId, portCountRole(portType));
 
     for (unsigned int portIndex = 0; portIndex < n; ++portIndex) {
         auto pp = portPosition(nodeId, portType, portIndex);

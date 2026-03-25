@@ -3,7 +3,6 @@
 #include <functional>
 
 #include <QtCore/QUuid>
-#include <QtCore/QVariant>
 
 namespace std {
 template<>

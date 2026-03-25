@@ -4,8 +4,6 @@
 
 #include "Export.hpp"
 
-class QPainter;
-
 namespace QtNodes {
 
 class ConnectionGraphicsObject;

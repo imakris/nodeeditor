@@ -37,25 +37,14 @@ inline PortIndex getPortIndex(PortType portType, ConnectionId connectionId)
 
 inline PortType oppositePort(PortType port)
 {
-    PortType result = PortType::None;
-
     switch (port) {
     case PortType::In:
-        result = PortType::Out;
-        break;
-
+        return PortType::Out;
     case PortType::Out:
-        result = PortType::In;
-        break;
-
-    case PortType::None:
-        result = PortType::None;
-        break;
-
+        return PortType::In;
     default:
-        break;
+        return PortType::None;
     }
-    return result;
 }
 
 inline bool isPortIndexValid(PortIndex index)
@@ -154,6 +143,11 @@ inline ConnectionId fromJson(QJsonObject const &connJson)
                         static_cast<PortIndex>(connJson["inPortIndex"].toInt(InvalidPortIndex))};
 
     return connId;
+}
+
+inline NodeRole portCountRole(PortType portType)
+{
+    return (portType == PortType::Out) ? NodeRole::OutPortCount : NodeRole::InPortCount;
 }
 
 } // namespace QtNodes

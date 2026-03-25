@@ -60,7 +60,7 @@ public:
     QColor GradientColor2;
     QColor GradientColor3;
     QColor ShadowColor;
-    bool ShadowEnabled;
+    bool ShadowEnabled{false};
     QColor FontColor;
     QColor FontColorFaded;
 
@@ -71,12 +71,12 @@ public:
     QColor ErrorColor;
     QColor ToolTipIconColor;
 
-    float PenWidth;
-    float HoveredPenWidth;
+    float PenWidth{0.0f};
+    float HoveredPenWidth{0.0f};
 
-    float ConnectionPointDiameter;
+    float ConnectionPointDiameter{0.0f};
 
-    float Opacity;
+    float Opacity{0.0f};
 
     // Status icons - initialized in constructor after Q_INIT_RESOURCE
     QIcon statusUpdated;
