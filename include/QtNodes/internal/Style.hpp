@@ -74,6 +74,17 @@ inline bool readFloat(QJsonObject const &obj, QString const &key, double &val)
     return true;
 }
 
+inline bool readFloat(QJsonObject const &obj, QString const &key, float &val)
+{
+    double tmp{};
+
+    if (!readFloat(obj, key, tmp))
+        return false;
+
+    val = static_cast<float>(tmp);
+    return true;
+}
+
 inline void writeFloat(QJsonObject &obj, QString const &key, double val)
 {
     obj[key] = val;

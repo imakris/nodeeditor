@@ -1,15 +1,16 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 #include <QtCore/QByteArray>
 #include <QtCore/QObject>
 
 #include "Definitions.hpp"
 #include "Export.hpp"
-#include "GroupGraphicsObject.hpp"
 
 namespace QtNodes {
 
+class GroupGraphicsObject;
 class NodeGraphicsObject;
 
 /**
@@ -33,6 +34,8 @@ public:
               GroupId groupId,
               QString name = QString(),
               QObject *parent = nullptr);
+
+    ~NodeGroup() override;
 
 public:
     /**

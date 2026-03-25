@@ -1,5 +1,7 @@
 #include "NodeGroup.hpp"
 #include "ConnectionIdUtils.hpp"
+#include "GroupGraphicsObject.hpp"
+#include "NodeGraphicsObject.hpp"
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -24,6 +26,8 @@ NodeGroup::NodeGroup(std::vector<NodeGraphicsObject *> nodes,
 {
     _groupCount++;
 }
+
+NodeGroup::~NodeGroup() = default;
 
 QByteArray NodeGroup::saveToFile() const
 {
