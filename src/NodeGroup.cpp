@@ -43,9 +43,9 @@ QByteArray NodeGroup::saveToFile() const
     groupJson["nodes"] = nodesJson;
 
     QJsonArray connectionsJson;
-    auto groupConnections = _groupGraphicsObject->connections();
+    auto const &groupConnections = _groupGraphicsObject->connections();
     for (auto const &connection : groupConnections) {
-        connectionsJson.append(toJson(*connection));
+        connectionsJson.append(toJson(connection));
     }
     groupJson["connections"] = connectionsJson;
 

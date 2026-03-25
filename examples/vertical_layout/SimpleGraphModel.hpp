@@ -8,6 +8,8 @@
 #include <QtNodes/ConnectionIdUtils>
 #include <QtNodes/StyleCollection>
 
+#include <unordered_map>
+
 using ConnectionId = QtNodes::ConnectionId;
 using ConnectionPolicy = QtNodes::ConnectionPolicy;
 using NodeFlag = QtNodes::NodeFlag;
@@ -38,13 +40,13 @@ public:
 
     ~SimpleGraphModel() override;
 
-    std::unordered_set<NodeId> allNodeIds() const override;
+    NodeIdSet const &allNodeIds() const override;
 
-    std::unordered_set<ConnectionId> allConnectionIds(NodeId const nodeId) const override;
+    ConnectionIdSet const &allConnectionIds(NodeId const nodeId) const override;
 
-    std::unordered_set<ConnectionId> connections(NodeId nodeId,
-                                                 PortType portType,
-                                                 PortIndex portIndex) const override;
+    ConnectionIdSet const &connections(NodeId nodeId,
+                                       PortType portType,
+                                       PortIndex portIndex) const override;
 
     bool connectionExists(ConnectionId const connectionId) const override;
 
@@ -92,7 +94,14 @@ private:
     NodeId newNodeId() override { return _nextNodeId++; }
 
 private:
-    std::unordered_set<NodeId> _nodeIds;
+    using ConnectionsByPort = std::unordered_map<PortIndex, ConnectionIdSet>;
+
+    static ConnectionIdSet const &emptyConnections();
+
+    void indexConnection(ConnectionId const connectionId);
+    void unindexConnection(ConnectionId const connectionId);
+
+    NodeIdSet _nodeIds;
 
     /// [Important] This is a user defined data structure backing your model.
     /// In your case it could be anything else representing a graph, for example, a
@@ -101,7 +110,10 @@ private:
     ///
     /// This data structure contains the graph connectivity information in both
     /// directions, i.e. from Node1 to Node2 and from Node2 to Node1.
-    std::unordered_set<ConnectionId> _connectivity;
+    ConnectionIdSet _connectivity;
+    std::unordered_map<NodeId, ConnectionIdSet> _nodeConnections;
+    std::unordered_map<NodeId, ConnectionsByPort> _inConnectionsByPort;
+    std::unordered_map<NodeId, ConnectionsByPort> _outConnectionsByPort;
 
     mutable std::unordered_map<NodeId, NodeGeometryData> _nodeGeometryData;
 

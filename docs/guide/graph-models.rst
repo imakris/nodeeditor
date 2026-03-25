@@ -24,14 +24,14 @@ Your model must implement these pure virtual methods:
        NodeId newNodeId() override;
 
        // Node queries
-       std::unordered_set<NodeId> allNodeIds() const override;
+       NodeIdSet const &allNodeIds() const override;
        bool nodeExists(NodeId) const override;
        QVariant nodeData(NodeId, NodeRole) const override;
        bool setNodeData(NodeId, NodeRole, QVariant) override;
 
        // Connection queries
-       std::unordered_set<ConnectionId> allConnectionIds(NodeId) const override;
-       std::unordered_set<ConnectionId> connections(NodeId, PortType, PortIndex) const override;
+       ConnectionIdSet const &allConnectionIds(NodeId) const override;
+       ConnectionIdSet const &connections(NodeId, PortType, PortIndex) const override;
        bool connectionExists(ConnectionId) const override;
        bool connectionPossible(ConnectionId) const override;
 

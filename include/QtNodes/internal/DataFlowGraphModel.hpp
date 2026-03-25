@@ -33,26 +33,26 @@ public:
 public:
     DataFlowGraphModel(std::shared_ptr<NodeDelegateModelRegistry> registry);
 
-    std::shared_ptr<NodeDelegateModelRegistry> dataModelRegistry() { return _registry; }
+    [[nodiscard]] std::shared_ptr<NodeDelegateModelRegistry> dataModelRegistry() { return _registry; }
 
 public:
-    std::unordered_set<NodeId> allNodeIds() const override;
+    NodeIdSet const &allNodeIds() const override;
 
-    std::unordered_set<ConnectionId> allConnectionIds(NodeId const nodeId) const override;
+    ConnectionIdSet const &allConnectionIds(NodeId const nodeId) const override;
 
-    std::unordered_set<ConnectionId> connections(NodeId nodeId,
-                                                 PortType portType,
-                                                 PortIndex portIndex) const override;
+    ConnectionIdSet const &connections(NodeId nodeId,
+                                       PortType portType,
+                                       PortIndex portIndex) const override;
 
-    bool connectionExists(ConnectionId const connectionId) const override;
+    [[nodiscard]] bool connectionExists(ConnectionId const connectionId) const override;
 
-    NodeId addNode(QString const nodeType) override;
+    [[nodiscard]] NodeId addNode(QString const nodeType) override;
 
-    bool connectionPossible(ConnectionId const connectionId) const override;
+    [[nodiscard]] bool connectionPossible(ConnectionId const connectionId) const override;
 
     void addConnection(ConnectionId const connectionId) override;
 
-    bool nodeExists(NodeId const nodeId) const override;
+    [[nodiscard]] bool nodeExists(NodeId const nodeId) const override;
 
     QVariant nodeData(NodeId nodeId, NodeRole role) const override;
 
@@ -150,6 +150,8 @@ private:
     std::shared_ptr<NodeDelegateModelRegistry> _registry;
 
     NodeId _nextNodeId;
+
+    NodeIdSet _nodeIds;
 
     std::unordered_map<NodeId, std::unique_ptr<NodeDelegateModel>> _models;
 

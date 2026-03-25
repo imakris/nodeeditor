@@ -1,5 +1,7 @@
 #include "SimpleGraphModel.hpp"
 
+#include <vector>
+
 SimpleGraphModel::SimpleGraphModel()
     : _nextNodeId{0}
 {}
@@ -9,40 +11,42 @@ SimpleGraphModel::~SimpleGraphModel()
     //
 }
 
-std::unordered_set<NodeId> SimpleGraphModel::allNodeIds() const
+QtNodes::AbstractGraphModel::NodeIdSet const &SimpleGraphModel::allNodeIds() const
 {
     return _nodeIds;
 }
 
-std::unordered_set<ConnectionId> SimpleGraphModel::allConnectionIds(NodeId const nodeId) const
+QtNodes::AbstractGraphModel::ConnectionIdSet const &
+SimpleGraphModel::allConnectionIds(NodeId const nodeId) const
 {
-    std::unordered_set<ConnectionId> result;
+    auto const it = _nodeConnections.find(nodeId);
+    if (it == _nodeConnections.end()) {
+        return emptyConnections();
+    }
 
-    std::copy_if(_connectivity.begin(),
-                 _connectivity.end(),
-                 std::inserter(result, std::end(result)),
-                 [&nodeId](ConnectionId const &cid) {
-                     return cid.inNodeId == nodeId || cid.outNodeId == nodeId;
-                 });
-
-    return result;
+    return it->second;
 }
 
-std::unordered_set<ConnectionId> SimpleGraphModel::connections(NodeId nodeId,
-                                                               PortType portType,
-                                                               PortIndex portIndex) const
+QtNodes::AbstractGraphModel::ConnectionIdSet const &
+SimpleGraphModel::connections(NodeId nodeId, PortType portType, PortIndex portIndex) const
 {
-    std::unordered_set<ConnectionId> result;
+    if (portType == PortType::None) {
+        return emptyConnections();
+    }
 
-    std::copy_if(_connectivity.begin(),
-                 _connectivity.end(),
-                 std::inserter(result, std::end(result)),
-                 [&portType, &portIndex, &nodeId](ConnectionId const &cid) {
-                     return (getNodeId(portType, cid) == nodeId
-                             && getPortIndex(portType, cid) == portIndex);
-                 });
+    auto const &connectionsByPort = (portType == PortType::In) ? _inConnectionsByPort
+                                                                : _outConnectionsByPort;
+    auto const nodeIt = connectionsByPort.find(nodeId);
+    if (nodeIt == connectionsByPort.end()) {
+        return emptyConnections();
+    }
 
-    return result;
+    auto const portIt = nodeIt->second.find(portIndex);
+    if (portIt == nodeIt->second.end()) {
+        return emptyConnections();
+    }
+
+    return portIt->second;
 }
 
 bool SimpleGraphModel::connectionExists(ConnectionId const connectionId) const
@@ -69,6 +73,7 @@ bool SimpleGraphModel::connectionPossible(ConnectionId const connectionId) const
 void SimpleGraphModel::addConnection(ConnectionId const connectionId)
 {
     _connectivity.insert(connectionId);
+    indexConnection(connectionId);
 
     Q_EMIT connectionCreated(connectionId);
 }
@@ -230,6 +235,7 @@ bool SimpleGraphModel::deleteConnection(ConnectionId const connectionId)
         disconnected = true;
 
         _connectivity.erase(it);
+        unindexConnection(connectionId);
     }
 
     if (disconnected)
@@ -240,9 +246,14 @@ bool SimpleGraphModel::deleteConnection(ConnectionId const connectionId)
 
 bool SimpleGraphModel::deleteNode(NodeId const nodeId)
 {
-    // Delete connections to this node first.
-    auto connectionIds = allConnectionIds(nodeId);
-    for (auto &cId : connectionIds) {
+    std::vector<ConnectionId> connectionIds;
+    auto const &attachedConnections = allConnectionIds(nodeId);
+    connectionIds.reserve(attachedConnections.size());
+    for (auto const &connectionId : attachedConnections) {
+        connectionIds.push_back(connectionId);
+    }
+
+    for (auto const &cId : connectionIds) {
         deleteConnection(cId);
     }
 
@@ -290,4 +301,62 @@ void SimpleGraphModel::loadNode(QJsonObject const &nodeJson)
 
         setNodeData(restoredNodeId, NodeRole::Position, pos);
     }
+}
+
+QtNodes::AbstractGraphModel::ConnectionIdSet const &SimpleGraphModel::emptyConnections()
+{
+    static ConnectionIdSet const empty{};
+    return empty;
+}
+
+void SimpleGraphModel::indexConnection(ConnectionId const connectionId)
+{
+    _nodeConnections[connectionId.inNodeId].insert(connectionId);
+    _nodeConnections[connectionId.outNodeId].insert(connectionId);
+    _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
+    _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
+}
+
+void SimpleGraphModel::unindexConnection(ConnectionId const connectionId)
+{
+    auto eraseFromNode = [&](NodeId nodeId) {
+        auto nodeIt = _nodeConnections.find(nodeId);
+        if (nodeIt == _nodeConnections.end()) {
+            return;
+        }
+
+        nodeIt->second.erase(connectionId);
+        if (nodeIt->second.empty()) {
+            _nodeConnections.erase(nodeIt);
+        }
+    };
+
+    auto eraseFromPortMap =
+        [&](std::unordered_map<NodeId, ConnectionsByPort> &connectionsByPort,
+            NodeId nodeId,
+            PortIndex portIndex) {
+            auto nodeIt = connectionsByPort.find(nodeId);
+            if (nodeIt == connectionsByPort.end()) {
+                return;
+            }
+
+            auto portIt = nodeIt->second.find(portIndex);
+            if (portIt == nodeIt->second.end()) {
+                return;
+            }
+
+            portIt->second.erase(connectionId);
+            if (portIt->second.empty()) {
+                nodeIt->second.erase(portIt);
+            }
+
+            if (nodeIt->second.empty()) {
+                connectionsByPort.erase(nodeIt);
+            }
+        };
+
+    eraseFromNode(connectionId.inNodeId);
+    eraseFromNode(connectionId.outNodeId);
+    eraseFromPortMap(_inConnectionsByPort, connectionId.inNodeId, connectionId.inPortIndex);
+    eraseFromPortMap(_outConnectionsByPort, connectionId.outNodeId, connectionId.outPortIndex);
 }

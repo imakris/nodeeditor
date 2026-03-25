@@ -66,7 +66,7 @@ public:
     }
 
 
-    std::unique_ptr<NodeDelegateModel> create(QString const &modelName);
+    [[nodiscard]] std::unique_ptr<NodeDelegateModel> create(QString const &modelName);
 
     RegisteredModelCreatorsMap const &registeredModelCreators() const;
 

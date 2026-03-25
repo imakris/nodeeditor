@@ -155,10 +155,10 @@ public:
     void unsetPossibleChild();
 
     /**
-   * @brief Returns all the connections that are incident strictly within the
-   * nodes of this group.
-   */
-    std::vector<std::shared_ptr<ConnectionId>> connections() const;
+     * @brief Returns all the connections that are incident strictly within the
+     * nodes of this group.
+     */
+    std::vector<ConnectionId> connections() const;
 
     /**
    * @brief Sets the position of the group.

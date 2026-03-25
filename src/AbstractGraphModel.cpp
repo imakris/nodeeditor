@@ -2,6 +2,8 @@
 
 #include <QtNodes/ConnectionIdUtils>
 
+#include <vector>
+
 namespace QtNodes {
 
 void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
@@ -22,9 +24,14 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
     auto clampedLast = std::min(last, portCount - 1);
 
     for (PortIndex portIndex = first; portIndex <= clampedLast; ++portIndex) {
-        std::unordered_set<ConnectionId> conns = connections(nodeId, portType, portIndex);
+        std::vector<ConnectionId> conns;
+        auto const &attachedConnections = connections(nodeId, portType, portIndex);
+        conns.reserve(attachedConnections.size());
+        for (auto const &connectionId : attachedConnections) {
+            conns.push_back(connectionId);
+        }
 
-        for (auto connectionId : conns) {
+        for (auto const connectionId : conns) {
             deleteConnection(connectionId);
         }
     }
@@ -32,9 +39,14 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
     std::size_t const nRemovedPorts = clampedLast - first + 1;
 
     for (PortIndex portIndex = clampedLast + 1; portIndex < portCount; ++portIndex) {
-        std::unordered_set<ConnectionId> conns = connections(nodeId, portType, portIndex);
+        std::vector<ConnectionId> conns;
+        auto const &attachedConnections = connections(nodeId, portType, portIndex);
+        conns.reserve(attachedConnections.size());
+        for (auto const &connectionId : attachedConnections) {
+            conns.push_back(connectionId);
+        }
 
-        for (auto connectionId : conns) {
+        for (auto const connectionId : conns) {
             // Erases the information about the port on one side;
             auto c = makeIncompleteConnectionId(connectionId, portType);
 
@@ -76,9 +88,14 @@ void AbstractGraphModel::portsAboutToBeInserted(NodeId const nodeId,
     std::size_t const nNewPorts = last - first + 1;
 
     for (PortIndex portIndex = first; portIndex < portCount; ++portIndex) {
-        std::unordered_set<ConnectionId> conns = connections(nodeId, portType, portIndex);
+        std::vector<ConnectionId> conns;
+        auto const &attachedConnections = connections(nodeId, portType, portIndex);
+        conns.reserve(attachedConnections.size());
+        for (auto const &connectionId : attachedConnections) {
+            conns.push_back(connectionId);
+        }
 
-        for (auto connectionId : conns) {
+        for (auto const connectionId : conns) {
             // Erases the information about the port on one side;
             auto c = makeIncompleteConnectionId(connectionId, portType);
 

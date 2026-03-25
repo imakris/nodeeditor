@@ -104,10 +104,10 @@ public:
      * @brief Creates a list of the connections that are incident only to nodes within a
      * given group.
      * @param groupID ID of the desired group.
-     * @return List of (pointers of) connections whose both endpoints belong to members of
-     * the specified group.
+     * @return List of connections whose both endpoints belong to members of the specified
+     * group.
      */
-    std::vector<std::shared_ptr<ConnectionId>> connectionsWithinGroup(GroupId groupID);
+    std::vector<ConnectionId> connectionsWithinGroup(GroupId groupID);
     /**
      * @brief Creates a group in the scene containing the given nodes.
      * @param nodes Reference to the list of nodes to be included in the group.

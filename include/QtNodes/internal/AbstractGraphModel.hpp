@@ -26,8 +26,11 @@ class NODE_EDITOR_PUBLIC AbstractGraphModel : public QObject
 {
     Q_OBJECT
 public:
+    using NodeIdSet = std::unordered_set<NodeId>;
+    using ConnectionIdSet = std::unordered_set<ConnectionId>;
+
     /// Generates a new unique NodeId.
-    virtual NodeId newNodeId() = 0;
+    [[nodiscard]] virtual NodeId newNodeId() = 0;
 
     /// @brief Returns the full set of unique Node Ids.
     /**
@@ -35,25 +38,34 @@ public:
      * Ids for all the nodes in the graph. From an Id it should be
      * possible to trace back to the model's internal representation of
      * the node.
+     *
+     * The returned reference must stay valid until the next mutating call on
+     * the graph model.
      */
-    virtual std::unordered_set<NodeId> allNodeIds() const = 0;
+    [[nodiscard]] virtual NodeIdSet const &allNodeIds() const = 0;
 
     /**
      * A collection of all input and output connections for the given `nodeId`.
+     *
+     * The returned reference must stay valid until the next mutating call on
+     * the graph model.
      */
-    virtual std::unordered_set<ConnectionId> allConnectionIds(NodeId const nodeId) const = 0;
+    [[nodiscard]] virtual ConnectionIdSet const &allConnectionIds(NodeId const nodeId) const = 0;
 
     /// @brief Returns all connected Node Ids for given port.
     /**
      * The returned set of nodes and port indices correspond to the type
      * opposite to the given `portType`.
+     *
+     * The returned reference must stay valid until the next mutating call on
+     * the graph model.
      */
-    virtual std::unordered_set<ConnectionId> connections(NodeId nodeId,
-                                                         PortType portType,
-                                                         PortIndex index) const = 0;
+    [[nodiscard]] virtual ConnectionIdSet const &connections(NodeId nodeId,
+                                                             PortType portType,
+                                                             PortIndex index) const = 0;
 
     /// Checks if two nodes with the given `connectionId` are connected.
-    virtual bool connectionExists(ConnectionId const connectionId) const = 0;
+    [[nodiscard]] virtual bool connectionExists(ConnectionId const connectionId) const = 0;
 
     /// Creates a new node instance in the derived class.
     /**
@@ -62,7 +74,7 @@ public:
      * model on its own, it helps to distinguish between possible node
      * types and create a correct instance inside.
      */
-    virtual NodeId addNode(QString const nodeType = QString()) = 0;
+    [[nodiscard]] virtual NodeId addNode(QString const nodeType = QString()) = 0;
 
     /// Model decides if a conection with a given connection Id possible.
     /**
@@ -71,7 +83,7 @@ public:
      * It is possible to override the function and connect non-equal
      * data types.
      */
-    virtual bool connectionPossible(ConnectionId const connectionId) const = 0;
+    [[nodiscard]] virtual bool connectionPossible(ConnectionId const connectionId) const = 0;
 
     /// Defines if detaching the connection is possible.
     virtual bool detachPossible(ConnectionId const) const { return true; }
@@ -91,7 +103,7 @@ public:
      * @returns `true` if there is data in the model associated with the
      * given `nodeId`.
      */
-    virtual bool nodeExists(NodeId const nodeId) const = 0;
+    [[nodiscard]] virtual bool nodeExists(NodeId const nodeId) const = 0;
 
     /// @brief Returns node-related data for requested NodeRole.
     /**

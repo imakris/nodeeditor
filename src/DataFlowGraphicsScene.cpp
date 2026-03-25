@@ -121,6 +121,80 @@ void validate_groups_json(QJsonObject const &sceneJson)
     }
 }
 
+QJsonObject scene_json_with_groups(QtNodes::DataFlowGraphModel const &graphModel,
+                                   QtNodes::BasicGraphicsScene const &scene)
+{
+    QJsonObject sceneJson = graphModel.save();
+
+    QJsonArray groupsJsonArray;
+    for (auto const &groupEntry : scene.groups()) {
+        GroupId const groupId = groupEntry.first;
+        auto const &groupPtr = groupEntry.second;
+
+        if (!groupPtr) {
+            continue;
+        }
+
+        QJsonObject groupJson;
+        groupJson["id"] = static_cast<qint64>(groupId);
+        groupJson["name"] = groupPtr->name();
+
+        QJsonArray nodeIdsJson;
+        for (NodeId const nodeId : groupPtr->nodeIDs()) {
+            nodeIdsJson.append(static_cast<qint64>(nodeId));
+        }
+        groupJson["nodes"] = nodeIdsJson;
+        groupJson["locked"] = groupPtr->groupGraphicsObject().locked();
+
+        groupsJsonArray.append(groupJson);
+    }
+
+    if (!groupsJsonArray.isEmpty()) {
+        sceneJson["groups"] = groupsJsonArray;
+    }
+
+    return sceneJson;
+}
+
+void restore_groups_from_json(QJsonObject const &sceneJson, QtNodes::BasicGraphicsScene &scene)
+{
+    if (!sceneJson.contains("groups")) {
+        return;
+    }
+
+    QJsonArray const groupsJsonArray = sceneJson["groups"].toArray();
+
+    for (QJsonValue const groupValue : groupsJsonArray) {
+        QJsonObject const groupObject = groupValue.toObject();
+
+        QJsonArray const nodeIdsJson = groupObject["nodes"].toArray();
+        std::vector<QtNodes::NodeGraphicsObject *> groupNodes;
+        groupNodes.reserve(nodeIdsJson.size());
+
+        for (QJsonValue const idValue : nodeIdsJson) {
+            NodeId nodeId = InvalidNodeId;
+            QtNodes::detail::read_node_id(idValue, nodeId);
+            if (auto *nodeObject = scene.nodeGraphicsObject(nodeId)) {
+                groupNodes.push_back(nodeObject);
+            }
+        }
+
+        if (groupNodes.empty()) {
+            continue;
+        }
+
+        QString const groupName = groupObject["name"].toString();
+        GroupId groupId = InvalidGroupId;
+        QtNodes::detail::read_group_id(groupObject["id"], groupId);
+
+        auto const groupWeak = scene.createGroup(groupNodes, groupName, groupId);
+        if (auto group = groupWeak.lock()) {
+            bool const locked = groupObject["locked"].toBool(true);
+            group->groupGraphicsObject().lock(locked);
+        }
+    }
+}
+
 } // namespace
 
 namespace QtNodes {
@@ -254,30 +328,7 @@ bool DataFlowGraphicsScene::save() const
 
         QFile file(fileName);
         if (file.open(QIODevice::WriteOnly)) {
-            QJsonObject sceneJson = _graphModel.save();
-
-            QJsonArray groupsJsonArray;
-            for (auto const &[groupId, groupPtr] : groups()) {
-                if (!groupPtr)
-                    continue;
-
-                QJsonObject groupJson;
-                groupJson["id"] = static_cast<qint64>(groupId);
-                groupJson["name"] = groupPtr->name();
-
-                QJsonArray nodeIdsJson;
-                for (NodeId const nodeId : groupPtr->nodeIDs()) {
-                    nodeIdsJson.append(static_cast<qint64>(nodeId));
-                }
-                groupJson["nodes"] = nodeIdsJson;
-                groupJson["locked"] = groupPtr->groupGraphicsObject().locked();
-
-                groupsJsonArray.append(groupJson);
-            }
-
-            if (!groupsJsonArray.isEmpty()) {
-                sceneJson["groups"] = groupsJsonArray;
-            }
+            QJsonObject sceneJson = scene_json_with_groups(_graphModel, *this);
 
             file.write(QJsonDocument(sceneJson).toJson());
             return true;
@@ -312,52 +363,28 @@ bool DataFlowGraphicsScene::load()
 
     try {
         validate_groups_json(sceneJson);
-
-        DataFlowGraphModel stagingModel(_graphModel.dataModelRegistry());
-        stagingModel.load(sceneJson);
     } catch (...) {
         return false;
     }
+
+    QJsonObject const previousSceneJson = scene_json_with_groups(_graphModel, *this);
 
     clearScene();
 
     try {
         _graphModel.load(sceneJson);
+        restore_groups_from_json(sceneJson, *this);
     } catch (...) {
-        return false;
-    }
+        clearScene();
 
-    if (sceneJson.contains("groups")) {
-        QJsonArray const groupsJsonArray = sceneJson["groups"].toArray();
-
-        for (QJsonValue groupValue : groupsJsonArray) {
-            QJsonObject const groupObject = groupValue.toObject();
-
-            QJsonArray const nodeIdsJson = groupObject["nodes"].toArray();
-            std::vector<NodeGraphicsObject *> groupNodes;
-            groupNodes.reserve(nodeIdsJson.size());
-
-            for (QJsonValue idValue : nodeIdsJson) {
-                NodeId nodeId = InvalidNodeId;
-                detail::read_node_id(idValue, nodeId);
-                if (auto *nodeObject = nodeGraphicsObject(nodeId)) {
-                    groupNodes.push_back(nodeObject);
-                }
-            }
-
-            if (groupNodes.empty())
-                continue;
-
-            QString const groupName = groupObject["name"].toString();
-            GroupId groupId = InvalidGroupId;
-            detail::read_group_id(groupObject["id"], groupId);
-
-            auto const groupWeak = createGroup(groupNodes, groupName, groupId);
-            if (auto group = groupWeak.lock()) {
-                bool const locked = groupObject["locked"].toBool(true);
-                group->groupGraphicsObject().lock(locked);
-            }
+        try {
+            _graphModel.load(previousSceneJson);
+            restore_groups_from_json(previousSceneJson, *this);
+        } catch (...) {
+            clearScene();
         }
+
+        return false;
     }
 
     Q_EMIT sceneLoaded();

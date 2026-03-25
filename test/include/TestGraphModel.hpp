@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 using QtNodes::AbstractGraphModel;
 using QtNodes::ConnectionId;
@@ -31,33 +32,39 @@ public:
 
     NodeId newNodeId() override { return _nextNodeId++; }
 
-    std::unordered_set<NodeId> allNodeIds() const override { return _nodeIds; }
+    NodeIdSet const &allNodeIds() const override { return _nodeIds; }
 
-    std::unordered_set<ConnectionId> allConnectionIds(NodeId const nodeId) const override
+    ConnectionIdSet const &allConnectionIds(NodeId const nodeId) const override
     {
-        std::unordered_set<ConnectionId> result;
-        for (const auto &conn : _connections) {
-            if (conn.inNodeId == nodeId || conn.outNodeId == nodeId) {
-                result.insert(conn);
-            }
+        auto const it = _nodeConnections.find(nodeId);
+        if (it == _nodeConnections.end()) {
+            return empty_connections();
         }
-        return result;
+
+        return it->second;
     }
 
-    std::unordered_set<ConnectionId> connections(NodeId nodeId,
-                                                 PortType portType,
-                                                 PortIndex portIndex) const override
+    ConnectionIdSet const &connections(NodeId nodeId,
+                                       PortType portType,
+                                       PortIndex portIndex) const override
     {
-        std::unordered_set<ConnectionId> result;
-        for (const auto &conn : _connections) {
-            if (portType == PortType::In && conn.inNodeId == nodeId && conn.inPortIndex == portIndex) {
-                result.insert(conn);
-            } else if (portType == PortType::Out && conn.outNodeId == nodeId
-                       && conn.outPortIndex == portIndex) {
-                result.insert(conn);
-            }
+        if (portType == PortType::None) {
+            return empty_connections();
         }
-        return result;
+
+        auto const &connectionsByPort = (portType == PortType::In) ? _inConnectionsByPort
+                                                                    : _outConnectionsByPort;
+        auto const nodeIt = connectionsByPort.find(nodeId);
+        if (nodeIt == connectionsByPort.end()) {
+            return empty_connections();
+        }
+
+        auto const portIt = nodeIt->second.find(portIndex);
+        if (portIt == nodeIt->second.end()) {
+            return empty_connections();
+        }
+
+        return portIt->second;
     }
 
     bool connectionExists(ConnectionId const connectionId) const override
@@ -89,6 +96,10 @@ public:
     {
         if (connectionPossible(connectionId)) {
             _connections.insert(connectionId);
+            _nodeConnections[connectionId.inNodeId].insert(connectionId);
+            _nodeConnections[connectionId.outNodeId].insert(connectionId);
+            _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
+            _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
             Q_EMIT connectionCreated(connectionId);
         }
     }
@@ -196,6 +207,16 @@ public:
         auto it = _connections.find(connectionId);
         if (it != _connections.end()) {
             _connections.erase(it);
+            eraseIndexedConnection(_nodeConnections, connectionId.inNodeId, connectionId);
+            eraseIndexedConnection(_nodeConnections, connectionId.outNodeId, connectionId);
+            eraseIndexedConnection(_inConnectionsByPort,
+                                   connectionId.inNodeId,
+                                   connectionId.inPortIndex,
+                                   connectionId);
+            eraseIndexedConnection(_outConnectionsByPort,
+                                   connectionId.outNodeId,
+                                   connectionId.outPortIndex,
+                                   connectionId);
             Q_EMIT connectionDeleted(connectionId);
             return true;
         }
@@ -207,15 +228,14 @@ public:
         if (!nodeExists(nodeId))
             return false;
 
-        // Remove all connections involving this node
         std::vector<ConnectionId> connectionsToRemove;
-        for (const auto &conn : _connections) {
-            if (conn.inNodeId == nodeId || conn.outNodeId == nodeId) {
-                connectionsToRemove.push_back(conn);
-            }
+        auto const &attachedConnections = allConnectionIds(nodeId);
+        connectionsToRemove.reserve(attachedConnections.size());
+        for (auto const &conn : attachedConnections) {
+            connectionsToRemove.push_back(conn);
         }
 
-        for (const auto &conn : connectionsToRemove) {
+        for (auto const &conn : connectionsToRemove) {
             deleteConnection(conn);
         }
 
@@ -277,8 +297,60 @@ public:
     }
 
 private:
+    using ConnectionsByPort = std::unordered_map<PortIndex, ConnectionIdSet>;
+
+    static void eraseIndexedConnection(std::unordered_map<NodeId, ConnectionIdSet> &connectionsByNode,
+                                       NodeId nodeId,
+                                       ConnectionId const &connectionId)
+    {
+        auto nodeIt = connectionsByNode.find(nodeId);
+        if (nodeIt == connectionsByNode.end()) {
+            return;
+        }
+
+        nodeIt->second.erase(connectionId);
+        if (nodeIt->second.empty()) {
+            connectionsByNode.erase(nodeIt);
+        }
+    }
+
+    static void eraseIndexedConnection(
+        std::unordered_map<NodeId, ConnectionsByPort> &connectionsByPort,
+        NodeId nodeId,
+        PortIndex portIndex,
+        ConnectionId const &connectionId)
+    {
+        auto nodeIt = connectionsByPort.find(nodeId);
+        if (nodeIt == connectionsByPort.end()) {
+            return;
+        }
+
+        auto portIt = nodeIt->second.find(portIndex);
+        if (portIt == nodeIt->second.end()) {
+            return;
+        }
+
+        portIt->second.erase(connectionId);
+        if (portIt->second.empty()) {
+            nodeIt->second.erase(portIt);
+        }
+
+        if (nodeIt->second.empty()) {
+            connectionsByPort.erase(nodeIt);
+        }
+    }
+
+    static ConnectionIdSet const &empty_connections()
+    {
+        static ConnectionIdSet const empty{};
+        return empty;
+    }
+
     NodeId _nextNodeId = 1;
-    std::unordered_set<NodeId> _nodeIds;
-    std::unordered_set<ConnectionId> _connections;
+    NodeIdSet _nodeIds;
+    ConnectionIdSet _connections;
+    std::unordered_map<NodeId, ConnectionIdSet> _nodeConnections;
+    std::unordered_map<NodeId, ConnectionsByPort> _inConnectionsByPort;
+    std::unordered_map<NodeId, ConnectionsByPort> _outConnectionsByPort;
     std::unordered_map<NodeId, std::unordered_map<NodeRole, QVariant>> _nodeData;
 };

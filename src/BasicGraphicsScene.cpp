@@ -245,19 +245,25 @@ void BasicGraphicsScene::resetDraftConnection()
 
 void BasicGraphicsScene::clearScene()
 {
+    std::vector<NodeId> nodeIds;
     auto const &allNodeIds = graphModel().allNodeIds();
+    nodeIds.reserve(allNodeIds.size());
+    for (auto const nodeId : allNodeIds) {
+        nodeIds.push_back(nodeId);
+    }
 
-    for (auto nodeId : allNodeIds) {
+    for (auto const nodeId : nodeIds) {
         graphModel().deleteNode(nodeId);
     }
 }
 
-std::vector<std::shared_ptr<ConnectionId>> BasicGraphicsScene::connectionsWithinGroup(GroupId groupID)
+std::vector<ConnectionId> BasicGraphicsScene::connectionsWithinGroup(GroupId groupID)
 {
     if (!_groupingEnabled)
         return {};
 
-    std::vector<std::shared_ptr<ConnectionId>> ret{};
+    std::vector<ConnectionId> ret{};
+    ret.reserve(_connectionGraphicsObjects.size());
 
     for (auto const &connection : _connectionGraphicsObjects) {
         auto outNode = nodeGraphicsObject(connection.first.outNodeId);
@@ -266,7 +272,7 @@ std::vector<std::shared_ptr<ConnectionId>> BasicGraphicsScene::connectionsWithin
             auto group1 = outNode->nodeGroup().lock();
             auto group2 = inNode->nodeGroup().lock();
             if (group1 && group2 && group1->id() == group2->id() && group1->id() == groupID) {
-                ret.push_back(std::make_shared<ConnectionId>(connection.first));
+                ret.push_back(connection.first);
             }
         }
     }
@@ -323,7 +329,7 @@ QMenu *BasicGraphicsScene::createSceneMenu(QPointF const scenePos)
 
 void BasicGraphicsScene::traverseGraphAndPopulateGraphicsObjects()
 {
-    auto allNodeIds = _graphModel.allNodeIds();
+    auto const &allNodeIds = _graphModel.allNodeIds();
 
     // First create all the nodes.
     for (NodeId const nodeId : allNodeIds) {
@@ -462,9 +468,9 @@ void BasicGraphicsScene::freezeModelAndConnections(bool isFreeze)
         if (auto n = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
             int portCount = graphModel().nodeData(n->nodeId(), NodeRole::OutPortCount).toInt();
             for (int i = 0; i < portCount; i++) {
-                auto graphConnections = graphModel().connections(n->nodeId(),
-                                                                 QtNodes::PortType::Out,
-                                                                 QtNodes::PortIndex(i));
+                auto const &graphConnections = graphModel().connections(n->nodeId(),
+                                                                        QtNodes::PortType::Out,
+                                                                        QtNodes::PortIndex(i));
 
                 for (auto const &c : graphConnections) {
                     if (auto *cgo = connectionGraphicsObject(c)) {

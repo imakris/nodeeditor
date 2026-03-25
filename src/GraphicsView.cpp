@@ -104,6 +104,19 @@ void set_node_cache_mode(
         return;
     }
 
+    if (auto *nodeScene = dynamic_cast<QtNodes::BasicGraphicsScene *>(scene)) {
+        for (auto const nodeId : nodeScene->graphModel().allNodeIds()) {
+            if (auto *item = nodeScene->nodeGraphicsObject(nodeId)) {
+                if (invalidate_cached_content && mode != QGraphicsItem::NoCache) {
+                    item->setCacheMode(QGraphicsItem::NoCache);
+                }
+                item->setCacheMode(mode);
+                item->update();
+            }
+        }
+        return;
+    }
+
     for (QGraphicsItem *item : scene->items()) {
         if (qgraphicsitem_cast<QtNodes::NodeGraphicsObject *>(item)) {
             if (invalidate_cached_content && mode != QGraphicsItem::NoCache) {

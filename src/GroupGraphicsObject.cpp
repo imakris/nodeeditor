@@ -182,7 +182,7 @@ void GroupGraphicsObject::unsetPossibleChild()
     updateGroupGeometry();
 }
 
-std::vector<std::shared_ptr<ConnectionId>> GroupGraphicsObject::connections() const
+std::vector<ConnectionId> GroupGraphicsObject::connections() const
 {
     return _scene.connectionsWithinGroup(group().id());
 }
