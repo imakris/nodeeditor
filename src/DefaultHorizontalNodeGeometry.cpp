@@ -1,6 +1,7 @@
 #include "DefaultHorizontalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "ConnectionIdUtils.hpp"
 #include "NodeRenderingUtils.hpp"
 #include "NodeData.hpp"
 
@@ -227,11 +228,7 @@ unsigned int DefaultHorizontalNodeGeometry::maxPortsTextAdvance(NodeId const nod
 {
     unsigned int width = 0;
 
-    size_t const n = _graphModel
-                         .nodeData(nodeId,
-                                   (portType == PortType::Out) ? NodeRole::OutPortCount
-                                                               : NodeRole::InPortCount)
-                         .toUInt();
+    size_t const n = _graphModel.nodeData(nodeId, portCountRole(portType)).toUInt();
 
     for (PortIndex portIndex = 0ul; portIndex < n; ++portIndex) {
         QString name;

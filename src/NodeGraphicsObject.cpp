@@ -147,7 +147,7 @@ void NodeGraphicsObject::embedQWidget()
 
         updateQWidgetEmbedPos();
 
-        //update();
+
 
         _proxyWidget->setOpacity(1.0);
         _proxyWidget->setFlag(QGraphicsItem::ItemIgnoresParentOpacity);
@@ -169,7 +169,6 @@ QRectF NodeGraphicsObject::boundingRect() const
 {
     AbstractNodeGeometry &geometry = nodeScene()->nodeGeometry();
     return geometry.boundingRect(_nodeId);
-    //return NodeGeometry(_nodeId, _graphModel, nodeScene()).boundingRect();
 }
 
 void NodeGraphicsObject::setGeometryChanged()
@@ -460,10 +459,9 @@ void NodeGraphicsObject::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 {
     auto pos = event->pos();
 
-    //NodeGeometry geometry(_nodeId, _graphModel, nodeScene());
     AbstractNodeGeometry &geometry = nodeScene()->nodeGeometry();
 
-    if ((_graphModel.nodeFlags(_nodeId) | NodeFlag::Resizable)
+    if ((_graphModel.nodeFlags(_nodeId) & NodeFlag::Resizable)
         && geometry.resizeHandleRect(_nodeId).contains(QPoint(pos.x(), pos.y()))) {
         setCursor(QCursor(Qt::SizeFDiagCursor));
     } else {

@@ -10,10 +10,7 @@
 
 namespace QtNodes {
 
-ConnectionState::~ConnectionState()
-{
-    //resetLastHoveredNode();
-}
+ConnectionState::~ConnectionState() = default;
 
 PortType ConnectionState::requiredPort() const
 {

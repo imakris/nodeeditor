@@ -11,9 +11,7 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
 {
     _shiftedByDynamicPortsConnections.clear();
 
-    auto portCountRole = portType == PortType::In ? NodeRole::InPortCount : NodeRole::OutPortCount;
-
-    unsigned int portCount = nodeData(nodeId, portCountRole).toUInt();
+    unsigned int portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
 
     if (first > portCount - 1)
         return;
@@ -67,9 +65,7 @@ void AbstractGraphModel::portsAboutToBeInserted(NodeId const nodeId,
 {
     _shiftedByDynamicPortsConnections.clear();
 
-    auto portCountRole = portType == PortType::In ? NodeRole::InPortCount : NodeRole::OutPortCount;
-
-    unsigned int portCount = nodeData(nodeId, portCountRole).toUInt();
+    unsigned int portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
 
     if (first > portCount)
         return;

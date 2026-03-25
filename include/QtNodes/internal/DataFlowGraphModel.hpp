@@ -107,6 +107,8 @@ Q_SIGNALS:
 private:
     NodeId newNodeId() override { return _nextNodeId++; }
 
+    void connectDelegateModel(NodeDelegateModel *model, NodeId nodeId);
+
     void sendConnectionCreation(ConnectionId const connectionId);
 
     void sendConnectionDeletion(ConnectionId const connectionId);

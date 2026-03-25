@@ -477,9 +477,7 @@ void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObj
     auto reducedDiameter = diameter * 0.6;
 
     for (PortType portType : {PortType::Out, PortType::In}) {
-        auto portCountRole = (portType == PortType::Out) ? NodeRole::OutPortCount
-                                                         : NodeRole::InPortCount;
-        size_t const n = model.nodeData(nodeId, portCountRole).toUInt();
+        size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
 
         for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
             QPointF p = geometry.portPosition(nodeId, portType, portIndex);
@@ -541,11 +539,7 @@ void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraph
     auto diameter = nodeStyle.ConnectionPointDiameter;
 
     for (PortType portType : {PortType::Out, PortType::In}) {
-        size_t const n = model
-                             .nodeData(nodeId,
-                                       (portType == PortType::Out) ? NodeRole::OutPortCount
-                                                                   : NodeRole::InPortCount)
-                             .toUInt();
+        size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
 
         for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
             QPointF p = geometry.portPosition(nodeId, portType, portIndex);
@@ -611,10 +605,7 @@ void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
     for (PortType portType : {PortType::Out, PortType::In}) {
-        unsigned int n = model.nodeData<unsigned int>(nodeId,
-                                                      (portType == PortType::Out)
-                                                          ? NodeRole::OutPortCount
-                                                          : NodeRole::InPortCount);
+        unsigned int n = model.nodeData<unsigned int>(nodeId, portCountRole(portType));
 
         for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
             auto const &connected = model.connections(nodeId, portType, portIndex);

@@ -42,8 +42,6 @@ ConnectionGraphicsObject::ConnectionGraphicsObject(BasicGraphicsScene &scene,
 
     setAcceptHoverEvents(true);
 
-    //addGraphicsEffect();
-
     setZValue(-1.0);
 
     initializePosition();
@@ -362,10 +360,6 @@ void ConnectionGraphicsObject::addGraphicsEffect()
     effect->setBlurRadius(5);
     setGraphicsEffect(effect);
 
-    //auto effect = new QGraphicsDropShadowEffect;
-    //auto effect = new ConnectionBlurEffect(this);
-    //effect->setOffset(4, 4);
-    //effect->setColor(QColor(Qt::gray).darker(800));
 }
 
 std::pair<QPointF, QPointF> ConnectionGraphicsObject::pointsC1C2Horizontal() const
