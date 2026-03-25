@@ -66,6 +66,7 @@ set(CPP_SOURCE_FILES
   src/AbstractGraphModel.cpp
   src/AbstractNodeGeometry.cpp
   src/BasicGraphicsScene.cpp
+  src/BasicGraphicsSceneGroups.cpp
   src/ConnectionGraphicsObject.cpp
   src/ConnectionState.cpp
   src/ConnectionStyle.cpp

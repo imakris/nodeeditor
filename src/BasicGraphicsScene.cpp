@@ -11,91 +11,13 @@
 #include "GraphicsView.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
-#include "SerializationValidation.hpp"
 
 #include <QUndoStack>
 
-#include <QHeaderView>
-#include <QLineEdit>
-#include <QTreeWidget>
-#include <QWidgetAction>
-#include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGraphicsSceneMoveEvent>
-
-#include <QtCore/QBuffer>
-#include <QtCore/QByteArray>
-#include <QtCore/QDebug>
-#include <QtCore/QFile>
-#include <QtCore/QIODevice>
-#include <QtCore/QJsonArray>
-#include <QtCore/QJsonDocument>
-#include <QtCore/QJsonParseError>
-#include <QtCore/QJsonObject>
-#include <QtCore/QJsonValue>
-#include <QtCore/QString>
 #include <QtCore/QtGlobal>
 
-#include <stdexcept>
 #include <queue>
-#include <unordered_set>
-#include <utility>
-
-namespace {
-
-using QtNodes::ConnectionId;
-using QtNodes::GroupId;
-using QtNodes::InvalidGroupId;
-using QtNodes::InvalidNodeId;
-using QtNodes::NodeId;
-
-NodeId jsonValueToNodeId(QJsonValue const &value)
-{
-    NodeId nodeId = InvalidNodeId;
-
-    if (!QtNodes::detail::read_node_id(value, nodeId)) {
-        return InvalidNodeId;
-    }
-
-    return nodeId;
-}
-
-void validate_group_json(QJsonObject const &groupJson)
-{
-    QString groupName;
-    if (!QtNodes::detail::read_required_string(groupJson, "name", groupName)) {
-        throw std::logic_error("Serialized group contains invalid name");
-    }
-    Q_UNUSED(groupName);
-
-    QJsonArray nodesJson;
-    if (!QtNodes::detail::read_required_array(groupJson, "nodes", nodesJson)) {
-        throw std::logic_error("Serialized group contains invalid nodes array");
-    }
-
-    QJsonArray connectionsJson;
-    if (!QtNodes::detail::read_required_array(groupJson, "connections", connectionsJson)) {
-        throw std::logic_error("Serialized group contains invalid connections array");
-    }
-
-    for (QJsonValue const &nodeValue : nodesJson) {
-        if (!nodeValue.isObject()) {
-            throw std::logic_error("Serialized group contains invalid node entry");
-        }
-    }
-
-    for (QJsonValue const &connectionValue : connectionsJson) {
-        if (!connectionValue.isObject()) {
-            throw std::logic_error("Serialized group contains invalid connection entry");
-        }
-
-        ConnectionId connId;
-        if (!QtNodes::tryFromJson(connectionValue.toObject(), connId)) {
-            throw std::logic_error("Serialized group contains invalid connection id");
-        }
-    }
-}
-
-} // namespace
 
 namespace QtNodes {
 
@@ -255,29 +177,6 @@ void BasicGraphicsScene::clearScene()
     for (auto const nodeId : nodeIds) {
         graphModel().deleteNode(nodeId);
     }
-}
-
-std::vector<ConnectionId> BasicGraphicsScene::connectionsWithinGroup(GroupId groupID)
-{
-    if (!_groupingEnabled)
-        return {};
-
-    std::vector<ConnectionId> ret{};
-    ret.reserve(_connectionGraphicsObjects.size());
-
-    for (auto const &connection : _connectionGraphicsObjects) {
-        auto outNode = nodeGraphicsObject(connection.first.outNodeId);
-        auto inNode = nodeGraphicsObject(connection.first.inNodeId);
-        if (outNode && inNode) {
-            auto group1 = outNode->nodeGroup().lock();
-            auto group2 = inNode->nodeGroup().lock();
-            if (group1 && group2 && group1->id() == group2->id() && group1->id() == groupID) {
-                ret.push_back(connection.first);
-            }
-        }
-    }
-
-    return ret;
 }
 
 NodeGraphicsObject *BasicGraphicsScene::nodeGraphicsObject(NodeId nodeId)
@@ -489,55 +388,6 @@ void BasicGraphicsScene::freezeModelAndConnections(bool isFreeze)
     }
 }
 
-std::weak_ptr<NodeGroup> BasicGraphicsScene::createGroup(std::vector<NodeGraphicsObject *> &nodes,
-                                                         QString groupName,
-                                                         GroupId groupId)
-{
-    if (!_groupingEnabled)
-        return std::weak_ptr<NodeGroup>();
-
-    if (nodes.empty())
-        return std::weak_ptr<NodeGroup>();
-
-    for (auto *node : nodes) {
-        if (!node->nodeGroup().expired())
-            removeNodeFromGroup(node->nodeId());
-    }
-
-    if (groupName.isEmpty()) {
-        groupName = "Group " + QString::number(NodeGroup::groupCount());
-    }
-
-    if (groupId == InvalidGroupId) {
-        groupId = nextGroupId();
-    } else {
-        if (_groups.count(groupId) != 0) {
-            throw std::runtime_error("Group identifier collision");
-        }
-
-        if (groupId >= _nextGroupId && _nextGroupId != InvalidGroupId) {
-            _nextGroupId = groupId + 1;
-        }
-    }
-
-    auto group = std::make_shared<NodeGroup>(nodes, groupId, groupName, this);
-    auto ggo = std::make_unique<GroupGraphicsObject>(*this, *group);
-
-    group->setGraphicsObject(std::move(ggo));
-
-    for (auto &nodePtr : nodes) {
-        auto node = _nodeGraphicsObjects[nodePtr->nodeId()].get();
-
-        node->setNodeGroup(group);
-    }
-
-    std::weak_ptr<NodeGroup> groupWeakPtr = group;
-
-    _groups[group->id()] = std::move(group);
-
-    return groupWeakPtr;
-}
-
 namespace {
 template<typename T>
 std::vector<T *> selectedItemsOfType(QGraphicsScene const *scene)
@@ -570,42 +420,6 @@ std::vector<GroupGraphicsObject *> BasicGraphicsScene::selectedGroups() const
     return selectedItemsOfType<GroupGraphicsObject>(this);
 }
 
-void BasicGraphicsScene::addNodeToGroup(NodeId nodeId, GroupId groupId)
-{
-    if (!_groupingEnabled)
-        return;
-
-    auto groupIt = _groups.find(groupId);
-    auto nodeIt = _nodeGraphicsObjects.find(nodeId);
-    if (groupIt == _groups.end() || nodeIt == _nodeGraphicsObjects.end())
-        return;
-
-    auto group = groupIt->second;
-    auto node = nodeIt->second.get();
-    group->addNode(node);
-    node->setNodeGroup(group);
-}
-
-void BasicGraphicsScene::removeNodeFromGroup(NodeId nodeId)
-{
-    if (!_groupingEnabled)
-        return;
-
-    auto nodeIt = _nodeGraphicsObjects.find(nodeId);
-    if (nodeIt == _nodeGraphicsObjects.end())
-        return;
-
-    auto group = nodeIt->second->nodeGroup().lock();
-    if (group) {
-        group->removeNode(nodeIt->second.get());
-        if (group->empty()) {
-            _groups.erase(group->id());
-        }
-    }
-    nodeIt->second->unsetNodeGroup();
-    nodeIt->second->lock(false);
-}
-
 std::weak_ptr<QtNodes::NodeGroup> BasicGraphicsScene::createGroupFromSelection(QString groupName)
 {
     if (!_groupingEnabled)
@@ -613,118 +427,6 @@ std::weak_ptr<QtNodes::NodeGroup> BasicGraphicsScene::createGroupFromSelection(Q
 
     auto nodes = selectedNodes();
     return createGroup(nodes, groupName);
-}
-
-NodeGraphicsObject &BasicGraphicsScene::loadNodeToMap(QJsonObject nodeJson, bool keepOriginalId)
-{
-    NodeId newNodeId = InvalidNodeId;
-
-    if (keepOriginalId) {
-        newNodeId = jsonValueToNodeId(nodeJson["id"]);
-        if (newNodeId == InvalidNodeId) {
-            throw std::logic_error("Invalid node id in serialized node");
-        }
-    } else {
-        newNodeId = _graphModel.newNodeId();
-        nodeJson["id"] = static_cast<qint64>(newNodeId);
-    }
-
-    _graphModel.loadNode(nodeJson);
-
-    auto *nodeObject = nodeGraphicsObject(newNodeId);
-    if (!nodeObject) {
-        auto graphicsObject = std::make_unique<NodeGraphicsObject>(*this, newNodeId);
-        nodeObject = graphicsObject.get();
-        _nodeGraphicsObjects[newNodeId] = std::move(graphicsObject);
-    }
-
-    return *nodeObject;
-}
-
-void BasicGraphicsScene::loadConnectionToMap(QJsonObject const &connectionJson,
-                                             std::unordered_map<NodeId, NodeId> const &nodeIdMap)
-{
-    ConnectionId connId;
-    if (!tryFromJson(connectionJson, connId)) {
-        throw std::logic_error("Invalid serialized connection");
-    }
-
-    auto const outIt = nodeIdMap.find(connId.outNodeId);
-    auto const inIt = nodeIdMap.find(connId.inNodeId);
-
-    if (outIt == nodeIdMap.end() || inIt == nodeIdMap.end()) {
-        throw std::logic_error("Serialized connection references unknown node id");
-    }
-
-    ConnectionId remapped{outIt->second, connId.outPortIndex, inIt->second, connId.inPortIndex};
-
-    if (_graphModel.connectionExists(remapped)) {
-        return;
-    }
-
-    if (!_graphModel.connectionPossible(remapped)) {
-        throw std::logic_error("Serialized connection is not valid for restored nodes");
-    }
-
-    _graphModel.addConnection(remapped);
-}
-
-std::pair<std::weak_ptr<NodeGroup>, std::unordered_map<GroupId, GroupId>>
-BasicGraphicsScene::restoreGroup(QJsonObject const &groupJson)
-{
-    if (!_groupingEnabled)
-        return {std::weak_ptr<NodeGroup>(), {}};
-
-    validate_group_json(groupJson);
-
-    // since the new nodes will have the same IDs as in the file and the connections
-    // need these old IDs to be restored, we must create new IDs and map them to the
-    // old ones so the connections are properly restored
-    std::unordered_map<GroupId, GroupId> IDsMap{};
-    std::unordered_map<NodeId, NodeId> nodeIdMap{};
-
-    std::vector<NodeGraphicsObject *> group_children{};
-    std::vector<NodeId> createdNodeIds{};
-
-    try {
-        QJsonArray nodesJson = groupJson["nodes"].toArray();
-        for (const QJsonValueRef nodeJson : nodesJson) {
-            QJsonObject nodeObject = nodeJson.toObject();
-            NodeId const oldNodeId = jsonValueToNodeId(nodeObject["id"]);
-
-            NodeGraphicsObject &nodeRef = loadNodeToMap(nodeObject, false);
-            NodeId const newNodeId = nodeRef.nodeId();
-
-            createdNodeIds.push_back(newNodeId);
-
-            if (oldNodeId != InvalidNodeId) {
-                nodeIdMap.emplace(oldNodeId, newNodeId);
-                IDsMap.emplace(static_cast<GroupId>(oldNodeId), static_cast<GroupId>(newNodeId));
-            }
-
-            group_children.push_back(&nodeRef);
-        }
-
-        QJsonArray connectionJsonArray = groupJson["connections"].toArray();
-        for (auto connection : connectionJsonArray) {
-            loadConnectionToMap(connection.toObject(), nodeIdMap);
-        }
-
-        return std::make_pair(createGroup(group_children, groupJson["name"].toString()), IDsMap);
-    } catch (...) {
-        for (NodeId const nodeId : createdNodeIds) {
-            if (_graphModel.nodeExists(nodeId)) {
-                _graphModel.deleteNode(nodeId);
-            }
-        }
-
-        throw;
-    }
-}
-
-std::unordered_map<GroupId, std::shared_ptr<NodeGroup>> const &BasicGraphicsScene::groups() const
-{
-    return _groups;
 }
 
 QMenu *BasicGraphicsScene::createStdMenu(QPointF const scenePos)
@@ -805,109 +507,6 @@ QMenu *BasicGraphicsScene::createGroupMenu(QPointF const scenePos, GroupGraphics
 
     menu->setAttribute(Qt::WA_DeleteOnClose);
     return menu;
-}
-
-void BasicGraphicsScene::saveGroupFile(GroupId groupID)
-{
-    if (!_groupingEnabled)
-        return;
-
-    QString fileName = QFileDialog::getSaveFileName(nullptr,
-                                                    tr("Save Node Group"),
-                                                    QDir::homePath(),
-                                                    tr("Node Group files (*.group)"));
-
-    if (!fileName.isEmpty()) {
-        if (!fileName.endsWith("group", Qt::CaseInsensitive))
-            fileName += ".group";
-
-        if (auto groupIt = _groups.find(groupID); groupIt != _groups.end()) {
-            QFile file(fileName);
-            if (file.open(QIODevice::WriteOnly)) {
-                file.write(groupIt->second->saveToFile());
-            } else {
-                qDebug() << "Error saving group file!";
-            }
-        } else {
-            qDebug() << "Error! Couldn't find group while saving.";
-        }
-    }
-}
-
-std::weak_ptr<NodeGroup> BasicGraphicsScene::loadGroupFile()
-{
-    if (!_groupingEnabled)
-        return std::weak_ptr<NodeGroup>();
-
-    QString fileName = QFileDialog::getOpenFileName(nullptr,
-                                                    tr("Open Node Group"),
-                                                    QDir::currentPath(),
-                                                    tr("Node Group files (*.group)"));
-
-    if (!QFileInfo::exists(fileName))
-        return std::weak_ptr<NodeGroup>();
-
-    QFile file(fileName);
-
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Error loading group file!";
-        return std::weak_ptr<NodeGroup>();
-    }
-
-    struct Current_dir_guard
-    {
-        QString path;
-
-        ~Current_dir_guard()
-        {
-            if (!path.isEmpty()) {
-                QDir::setCurrent(path);
-            }
-        }
-    };
-
-    Current_dir_guard currentDirGuard{QDir::currentPath()};
-    QDir d = QFileInfo(fileName).absoluteDir();
-    QString absolute = d.absolutePath();
-    QDir::setCurrent(absolute);
-
-    QByteArray wholeFile = file.readAll();
-
-    QJsonParseError parseError{};
-    QJsonDocument const groupDocument = QJsonDocument::fromJson(wholeFile, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !groupDocument.isObject()) {
-        return std::weak_ptr<NodeGroup>();
-    }
-
-    const QJsonObject fileJson = groupDocument.object();
-
-    try {
-        return restoreGroup(fileJson).first;
-    } catch (std::exception const &ex) {
-        qWarning() << "Failed to load group file:" << ex.what();
-        return std::weak_ptr<NodeGroup>();
-    } catch (...) {
-        qWarning() << "Failed to load group file due to an unknown error";
-        return std::weak_ptr<NodeGroup>();
-    }
-}
-
-GroupId BasicGraphicsScene::nextGroupId()
-{
-    if (_nextGroupId == InvalidGroupId) {
-        throw std::runtime_error("No available group identifiers");
-    }
-
-    while (_groups.count(_nextGroupId) != 0) {
-        ++_nextGroupId;
-        if (_nextGroupId == InvalidGroupId) {
-            throw std::runtime_error("No available group identifiers");
-        }
-    }
-
-    GroupId const newId = _nextGroupId;
-    ++_nextGroupId;
-    return newId;
 }
 
 } // namespace QtNodes
