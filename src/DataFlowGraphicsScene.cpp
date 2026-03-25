@@ -4,6 +4,7 @@
 #include "GraphicsView.hpp"
 #include "NodeDelegateModelRegistry.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "SerializationValidation.hpp"
 #include "UndoCommands.hpp"
 
 #include <QtWidgets/QFileDialog>
@@ -15,7 +16,6 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
-#include <QtCore/QDataStream>
 #include <QtCore/QDebug>
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
@@ -23,10 +23,10 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QJsonValue>
-#include <QtCore/QUuid>
 #include <QtCore/QtGlobal>
 
 #include <stdexcept>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,35 +34,91 @@ namespace {
 
 using QtNodes::GroupId;
 using QtNodes::InvalidGroupId;
+using QtNodes::InvalidNodeId;
+using QtNodes::NodeId;
 
-GroupId jsonValueToGroupId(QJsonValue const &value)
+std::unordered_set<NodeId> collect_node_ids(QJsonArray const &nodesJsonArray)
 {
-    if (value.isDouble()) {
-        return static_cast<GroupId>(value.toInt());
-    }
+    std::unordered_set<NodeId> nodeIds;
+    nodeIds.reserve(nodesJsonArray.size());
 
-    if (value.isString()) {
-        auto const textValue = value.toString();
-
-        bool ok = false;
-        auto const numericValue = textValue.toULongLong(&ok, 10);
-        if (ok) {
-            return static_cast<GroupId>(numericValue);
+    for (QJsonValue const &nodeValue : nodesJsonArray) {
+        if (!nodeValue.isObject()) {
+            throw std::logic_error("Serialized scene contains invalid node entry");
         }
 
-        QUuid uuidValue(textValue);
-        if (!uuidValue.isNull()) {
-            auto const bytes = uuidValue.toRfc4122();
-            if (bytes.size() >= static_cast<int>(sizeof(quint32))) {
-                QDataStream stream(bytes);
-                quint32 value32 = 0U;
-                stream >> value32;
-                return static_cast<GroupId>(value32);
+        NodeId nodeId = InvalidNodeId;
+        if (!QtNodes::detail::read_node_id(nodeValue.toObject()["id"], nodeId)) {
+            throw std::logic_error("Serialized scene contains invalid node id");
+        }
+
+        if (!nodeIds.insert(nodeId).second) {
+            throw std::logic_error("Serialized scene contains duplicate node ids");
+        }
+    }
+
+    return nodeIds;
+}
+
+void validate_groups_json(QJsonObject const &sceneJson)
+{
+    if (!sceneJson.contains("groups")) {
+        return;
+    }
+
+    QJsonArray groupsJsonArray;
+    if (!QtNodes::detail::read_required_array(sceneJson, "groups", groupsJsonArray)) {
+        throw std::logic_error("Serialized scene contains invalid groups array");
+    }
+
+    QJsonArray nodesJsonArray;
+    if (!QtNodes::detail::read_required_array(sceneJson, "nodes", nodesJsonArray)) {
+        throw std::logic_error("Serialized scene is missing nodes array");
+    }
+
+    std::unordered_set<NodeId> const nodeIds = collect_node_ids(nodesJsonArray);
+    std::unordered_set<GroupId> seenGroupIds;
+
+    for (QJsonValue const &groupValue : groupsJsonArray) {
+        if (!groupValue.isObject()) {
+            throw std::logic_error("Serialized scene contains invalid group entry");
+        }
+
+        QJsonObject const groupObject = groupValue.toObject();
+
+        GroupId groupId = InvalidGroupId;
+        if (!QtNodes::detail::read_group_id(groupObject["id"], groupId)) {
+            throw std::logic_error("Serialized scene contains invalid group id");
+        }
+
+        if (!seenGroupIds.insert(groupId).second) {
+            throw std::logic_error("Serialized scene contains duplicate group ids");
+        }
+
+        QString groupName;
+        if (!QtNodes::detail::read_required_string(groupObject, "name", groupName)) {
+            throw std::logic_error("Serialized scene contains invalid group name");
+        }
+        Q_UNUSED(groupName);
+
+        QJsonArray nodeIdsJson;
+        if (!QtNodes::detail::read_required_array(groupObject, "nodes", nodeIdsJson)) {
+            throw std::logic_error("Serialized scene contains invalid group nodes");
+        }
+
+        bool locked = true;
+        if (!QtNodes::detail::read_optional_bool(groupObject, "locked", locked)) {
+            throw std::logic_error("Serialized scene contains invalid group lock state");
+        }
+        Q_UNUSED(locked);
+
+        for (QJsonValue const &idValue : nodeIdsJson) {
+            NodeId nodeId = InvalidNodeId;
+            if (!QtNodes::detail::read_node_id(idValue, nodeId) || nodeIds.count(nodeId) == 0) {
+                throw std::logic_error("Serialized scene group references unknown node id");
             }
         }
     }
-
-    return InvalidGroupId;
 }
 
 } // namespace
@@ -245,8 +301,6 @@ bool DataFlowGraphicsScene::load()
     if (!file.open(QIODevice::ReadOnly))
         return false;
 
-    clearScene();
-
     QByteArray const wholeFile = file.readAll();
 
     QJsonParseError parseError{};
@@ -256,7 +310,22 @@ bool DataFlowGraphicsScene::load()
 
     QJsonObject const sceneJson = sceneDocument.object();
 
-    _graphModel.load(sceneJson);
+    try {
+        validate_groups_json(sceneJson);
+
+        DataFlowGraphModel stagingModel(_graphModel.dataModelRegistry());
+        stagingModel.load(sceneJson);
+    } catch (...) {
+        return false;
+    }
+
+    clearScene();
+
+    try {
+        _graphModel.load(sceneJson);
+    } catch (...) {
+        return false;
+    }
 
     if (sceneJson.contains("groups")) {
         QJsonArray const groupsJsonArray = sceneJson["groups"].toArray();
@@ -269,7 +338,8 @@ bool DataFlowGraphicsScene::load()
             groupNodes.reserve(nodeIdsJson.size());
 
             for (QJsonValue idValue : nodeIdsJson) {
-                NodeId const nodeId = static_cast<NodeId>(idValue.toInt());
+                NodeId nodeId = InvalidNodeId;
+                detail::read_node_id(idValue, nodeId);
                 if (auto *nodeObject = nodeGraphicsObject(nodeId)) {
                     groupNodes.push_back(nodeObject);
                 }
@@ -279,7 +349,8 @@ bool DataFlowGraphicsScene::load()
                 continue;
 
             QString const groupName = groupObject["name"].toString();
-            GroupId const groupId = jsonValueToGroupId(groupObject["id"]);
+            GroupId groupId = InvalidGroupId;
+            detail::read_group_id(groupObject["id"], groupId);
 
             auto const groupWeak = createGroup(groupNodes, groupName, groupId);
             if (auto group = groupWeak.lock()) {

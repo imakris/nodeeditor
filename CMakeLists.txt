@@ -124,6 +124,7 @@ set(HPP_HEADER_FILES
   include/QtNodes/internal/QStringStdHash.hpp
   include/QtNodes/internal/QUuidStdHash.hpp
   include/QtNodes/internal/Serializable.hpp
+  include/QtNodes/internal/SerializationValidation.hpp
   include/QtNodes/internal/Style.hpp
   include/QtNodes/internal/StyleCollection.hpp
   include/QtNodes/internal/DefaultConnectionPainter.hpp

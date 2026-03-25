@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Definitions.hpp"
+#include "SerializationValidation.hpp"
 
 #include <QJsonObject>
 
@@ -129,25 +130,32 @@ inline QJsonObject toJson(ConnectionId const &connId)
 
 inline ConnectionId fromJson(QJsonObject const &connJson)
 {
-    auto parse_unsigned = [](QJsonValue const &value, quint64 maxValue, quint64 invalidValue) {
-        bool ok = false;
-        quint64 const parsed = value.toVariant().toULongLong(&ok);
-        if (!ok || parsed > maxValue) {
-            return invalidValue;
-        }
+    ConnectionId connId{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
 
-        return parsed;
-    };
-
-    ConnectionId connId{
-        static_cast<NodeId>(parse_unsigned(connJson["outNodeId"], InvalidNodeId - 1ull, InvalidNodeId)),
-        static_cast<PortIndex>(
-            parse_unsigned(connJson["outPortIndex"], InvalidPortIndex - 1ull, InvalidPortIndex)),
-        static_cast<NodeId>(parse_unsigned(connJson["inNodeId"], InvalidNodeId - 1ull, InvalidNodeId)),
-        static_cast<PortIndex>(
-            parse_unsigned(connJson["inPortIndex"], InvalidPortIndex - 1ull, InvalidPortIndex))};
+    detail::read_node_id(connJson["outNodeId"], connId.outNodeId);
+    detail::read_port_index(connJson["outPortIndex"], connId.outPortIndex);
+    detail::read_node_id(connJson["inNodeId"], connId.inNodeId);
+    detail::read_port_index(connJson["inPortIndex"], connId.inPortIndex);
 
     return connId;
+}
+
+inline bool tryFromJson(QJsonObject const &connJson, ConnectionId &connId)
+{
+    NodeId outNodeId = InvalidNodeId;
+    NodeId inNodeId = InvalidNodeId;
+    PortIndex outPortIndex = InvalidPortIndex;
+    PortIndex inPortIndex = InvalidPortIndex;
+
+    if (!detail::read_node_id(connJson["outNodeId"], outNodeId)
+        || !detail::read_port_index(connJson["outPortIndex"], outPortIndex)
+        || !detail::read_node_id(connJson["inNodeId"], inNodeId)
+        || !detail::read_port_index(connJson["inPortIndex"], inPortIndex)) {
+        return false;
+    }
+
+    connId = ConnectionId{outNodeId, outPortIndex, inNodeId, inPortIndex};
+    return true;
 }
 
 inline NodeRole portCountRole(PortType portType)

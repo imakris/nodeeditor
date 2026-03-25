@@ -1,0 +1,157 @@
+#pragma once
+
+#include "Definitions.hpp"
+
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QPointF>
+#include <QString>
+
+#include <cmath>
+
+namespace QtNodes::detail {
+
+inline bool read_unsigned_number(QJsonValue const &value, quint64 maxValue, quint64 &result)
+{
+    if (!value.isDouble()) {
+        return false;
+    }
+
+    double const parsed = value.toDouble();
+    if (!std::isfinite(parsed) || parsed < 0.0 || parsed > static_cast<double>(maxValue)) {
+        return false;
+    }
+
+    quint64 const integral = static_cast<quint64>(parsed);
+    if (parsed != static_cast<double>(integral)) {
+        return false;
+    }
+
+    result = integral;
+    return true;
+}
+
+inline bool read_node_id(QJsonValue const &value, NodeId &nodeId)
+{
+    quint64 parsed = 0;
+
+    if (!read_unsigned_number(value, InvalidNodeId - 1ull, parsed)) {
+        return false;
+    }
+
+    nodeId = static_cast<NodeId>(parsed);
+    return true;
+}
+
+inline bool read_group_id(QJsonValue const &value, GroupId &groupId)
+{
+    quint64 parsed = 0;
+
+    if (!read_unsigned_number(value, InvalidGroupId - 1ull, parsed)) {
+        return false;
+    }
+
+    groupId = static_cast<GroupId>(parsed);
+    return true;
+}
+
+inline bool read_port_index(QJsonValue const &value, PortIndex &portIndex)
+{
+    quint64 parsed = 0;
+
+    if (!read_unsigned_number(value, InvalidPortIndex - 1ull, parsed)) {
+        return false;
+    }
+
+    portIndex = static_cast<PortIndex>(parsed);
+    return true;
+}
+
+inline bool read_finite_number(QJsonValue const &value, double &result)
+{
+    if (!value.isDouble()) {
+        return false;
+    }
+
+    double const parsed = value.toDouble();
+    if (!std::isfinite(parsed)) {
+        return false;
+    }
+
+    result = parsed;
+    return true;
+}
+
+inline bool read_required_object(QJsonObject const &obj, QString const &key, QJsonObject &result)
+{
+    auto const it = obj.find(key);
+
+    if (it == obj.end() || !it->isObject()) {
+        return false;
+    }
+
+    result = it->toObject();
+    return true;
+}
+
+inline bool read_required_array(QJsonObject const &obj, QString const &key, QJsonArray &result)
+{
+    auto const it = obj.find(key);
+
+    if (it == obj.end() || !it->isArray()) {
+        return false;
+    }
+
+    result = it->toArray();
+    return true;
+}
+
+inline bool read_required_string(QJsonObject const &obj, QString const &key, QString &result)
+{
+    auto const it = obj.find(key);
+
+    if (it == obj.end() || !it->isString()) {
+        return false;
+    }
+
+    result = it->toString();
+    return true;
+}
+
+inline bool read_optional_bool(QJsonObject const &obj, QString const &key, bool &result)
+{
+    auto const it = obj.find(key);
+
+    if (it == obj.end()) {
+        return true;
+    }
+
+    if (!it->isBool()) {
+        return false;
+    }
+
+    result = it->toBool();
+    return true;
+}
+
+inline bool read_required_point(QJsonObject const &obj, QString const &key, QPointF &result)
+{
+    QJsonObject pointObject;
+
+    if (!read_required_object(obj, key, pointObject)) {
+        return false;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+
+    if (!read_finite_number(pointObject["x"], x) || !read_finite_number(pointObject["y"], y)) {
+        return false;
+    }
+
+    result = QPointF(x, y);
+    return true;
+}
+
+} // namespace QtNodes::detail

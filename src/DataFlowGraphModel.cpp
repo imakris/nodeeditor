@@ -10,6 +10,7 @@
 #include <stack>
 #include <stdexcept>
 #include <unordered_set>
+#include <vector>
 
 namespace QtNodes {
 
@@ -17,13 +18,24 @@ namespace {
 
 NodeId json_value_to_node_id(QJsonValue const &value)
 {
-    bool ok = false;
-    quint64 const parsed = value.toVariant().toULongLong(&ok);
-    if (!ok || parsed >= InvalidNodeId) {
+    NodeId nodeId = InvalidNodeId;
+
+    if (!detail::read_node_id(value, nodeId)) {
         return InvalidNodeId;
     }
 
-    return static_cast<NodeId>(parsed);
+    return nodeId;
+}
+
+QPointF json_object_to_point(QJsonObject const &obj, QString const &key)
+{
+    QPointF point;
+
+    if (!detail::read_required_point(obj, key, point)) {
+        throw std::logic_error("Invalid node position in serialized node");
+    }
+
+    return point;
 }
 
 } // namespace
@@ -668,11 +680,25 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
         throw std::logic_error("Invalid node id in serialized node");
     }
 
-    _nextNodeId = std::max(_nextNodeId, restoredNodeId + 1);
+    if (_models.find(restoredNodeId) != _models.end()) {
+        throw std::logic_error("Node identifier collision in serialized node");
+    }
 
-    QJsonObject const internalDataJson = nodeJson["internal-data"].toObject();
+    quint64 const nextNodeIdCandidate = static_cast<quint64>(restoredNodeId) + 1ull;
+    _nextNodeId = std::max(_nextNodeId, static_cast<NodeId>(nextNodeIdCandidate));
 
-    QString delegateModelName = internalDataJson["model-name"].toString();
+    QJsonObject internalDataJson;
+    if (!detail::read_required_object(nodeJson, "internal-data", internalDataJson)) {
+        throw std::logic_error("Missing internal-data object in serialized node");
+    }
+
+    QString delegateModelName;
+    if (!detail::read_required_string(internalDataJson, "model-name", delegateModelName)
+        || delegateModelName.isEmpty()) {
+        throw std::logic_error("Missing model-name in serialized node");
+    }
+
+    QPointF const pos = json_object_to_point(nodeJson, "position");
 
     std::unique_ptr<NodeDelegateModel> model = _registry->create(delegateModelName);
 
@@ -683,12 +709,14 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
 
         Q_EMIT nodeCreated(restoredNodeId);
 
-        QJsonObject posJson = nodeJson["position"].toObject();
-        QPointF const pos(posJson["x"].toDouble(), posJson["y"].toDouble());
-
         setNodeData(restoredNodeId, NodeRole::Position, pos);
 
-        _models[restoredNodeId]->load(internalDataJson);
+        try {
+            _models[restoredNodeId]->load(internalDataJson);
+        } catch (...) {
+            deleteNode(restoredNodeId);
+            throw;
+        }
     } else {
         throw std::logic_error(std::string("No registered model with name ")
                                + delegateModelName.toLocal8Bit().data());
@@ -697,21 +725,70 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
 
 void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
 {
-    QJsonArray nodesJsonArray = jsonDocument["nodes"].toArray();
-
-    for (QJsonValueRef nodeJson : nodesJsonArray) {
-        loadNode(nodeJson.toObject());
+    QJsonArray nodesJsonArray;
+    if (!detail::read_required_array(jsonDocument, "nodes", nodesJsonArray)) {
+        throw std::logic_error("Serialized graph is missing nodes array");
     }
 
-    QJsonArray connectionJsonArray = jsonDocument["connections"].toArray();
+    QJsonArray connectionJsonArray;
+    if (!detail::read_required_array(jsonDocument, "connections", connectionJsonArray)) {
+        throw std::logic_error("Serialized graph is missing connections array");
+    }
 
-    for (QJsonValueRef connection : connectionJsonArray) {
-        QJsonObject connJson = connection.toObject();
+    for (QJsonValue const &nodeJson : nodesJsonArray) {
+        if (!nodeJson.isObject()) {
+            throw std::logic_error("Serialized graph contains invalid node entry");
+        }
+    }
 
-        ConnectionId connId = fromJson(connJson);
+    std::vector<ConnectionId> parsedConnections;
+    parsedConnections.reserve(connectionJsonArray.size());
 
-        // Restore the connection
-        addConnection(connId);
+    for (QJsonValue const &connection : connectionJsonArray) {
+        if (!connection.isObject()) {
+            throw std::logic_error("Serialized graph contains invalid connection entry");
+        }
+
+        ConnectionId connId;
+        if (!tryFromJson(connection.toObject(), connId)) {
+            throw std::logic_error("Serialized graph contains invalid connection id");
+        }
+
+        parsedConnections.push_back(connId);
+    }
+
+    std::vector<NodeId> loadedNodeIds;
+    loadedNodeIds.reserve(nodesJsonArray.size());
+    std::vector<ConnectionId> loadedConnections;
+    loadedConnections.reserve(parsedConnections.size());
+
+    try {
+        for (QJsonValueRef nodeJson : nodesJsonArray) {
+            NodeId const nodeId = json_value_to_node_id(nodeJson.toObject()["id"]);
+            loadNode(nodeJson.toObject());
+            loadedNodeIds.push_back(nodeId);
+        }
+
+        for (ConnectionId const connId : parsedConnections) {
+            if (!connectionPossible(connId)) {
+                throw std::logic_error("Serialized graph contains invalid connection");
+            }
+
+            addConnection(connId);
+            loadedConnections.push_back(connId);
+        }
+    } catch (...) {
+        for (auto it = loadedConnections.rbegin(); it != loadedConnections.rend(); ++it) {
+            deleteConnection(*it);
+        }
+
+        for (auto it = loadedNodeIds.rbegin(); it != loadedNodeIds.rend(); ++it) {
+            if (nodeExists(*it)) {
+                deleteNode(*it);
+            }
+        }
+
+        throw;
     }
 }
 

@@ -11,6 +11,7 @@
 #include "GraphicsView.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "SerializationValidation.hpp"
 
 #include <QUndoStack>
 
@@ -23,23 +24,24 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
-#include <QtCore/QDataStream>
 #include <QtCore/QFile>
 #include <QtCore/QIODevice>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QJsonParseError>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonValue>
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 
 #include <stdexcept>
+#include <queue>
 #include <unordered_set>
 #include <utility>
-#include <queue>
 
 namespace {
 
+using QtNodes::ConnectionId;
 using QtNodes::GroupId;
 using QtNodes::InvalidGroupId;
 using QtNodes::InvalidNodeId;
@@ -47,32 +49,49 @@ using QtNodes::NodeId;
 
 NodeId jsonValueToNodeId(QJsonValue const &value)
 {
-    if (value.isDouble()) {
-        return static_cast<NodeId>(value.toInt());
+    NodeId nodeId = InvalidNodeId;
+
+    if (!QtNodes::detail::read_node_id(value, nodeId)) {
+        return InvalidNodeId;
     }
 
-    if (value.isString()) {
-        auto const textValue = value.toString();
+    return nodeId;
+}
 
-        bool ok = false;
-        auto const numericValue = textValue.toULongLong(&ok, 10);
-        if (ok) {
-            return static_cast<NodeId>(numericValue);
-        }
+void validate_group_json(QJsonObject const &groupJson)
+{
+    QString groupName;
+    if (!QtNodes::detail::read_required_string(groupJson, "name", groupName)) {
+        throw std::logic_error("Serialized group contains invalid name");
+    }
+    Q_UNUSED(groupName);
 
-        QUuid uuidValue(textValue);
-        if (!uuidValue.isNull()) {
-            auto const bytes = uuidValue.toRfc4122();
-            if (bytes.size() >= static_cast<int>(sizeof(quint32))) {
-                QDataStream stream(bytes);
-                quint32 value32 = 0U;
-                stream >> value32;
-                return static_cast<NodeId>(value32);
-            }
+    QJsonArray nodesJson;
+    if (!QtNodes::detail::read_required_array(groupJson, "nodes", nodesJson)) {
+        throw std::logic_error("Serialized group contains invalid nodes array");
+    }
+
+    QJsonArray connectionsJson;
+    if (!QtNodes::detail::read_required_array(groupJson, "connections", connectionsJson)) {
+        throw std::logic_error("Serialized group contains invalid connections array");
+    }
+
+    for (QJsonValue const &nodeValue : nodesJson) {
+        if (!nodeValue.isObject()) {
+            throw std::logic_error("Serialized group contains invalid node entry");
         }
     }
 
-    return InvalidNodeId;
+    for (QJsonValue const &connectionValue : connectionsJson) {
+        if (!connectionValue.isObject()) {
+            throw std::logic_error("Serialized group contains invalid connection entry");
+        }
+
+        ConnectionId connId;
+        if (!QtNodes::tryFromJson(connectionValue.toObject(), connId)) {
+            throw std::logic_error("Serialized group contains invalid connection id");
+        }
+    }
 }
 
 } // namespace
@@ -595,9 +614,10 @@ NodeGraphicsObject &BasicGraphicsScene::loadNodeToMap(QJsonObject nodeJson, bool
 
     if (keepOriginalId) {
         newNodeId = jsonValueToNodeId(nodeJson["id"]);
-    }
-
-    if (newNodeId == InvalidNodeId) {
+        if (newNodeId == InvalidNodeId) {
+            throw std::logic_error("Invalid node id in serialized node");
+        }
+    } else {
         newNodeId = _graphModel.newNodeId();
         nodeJson["id"] = static_cast<qint64>(newNodeId);
     }
@@ -617,13 +637,16 @@ NodeGraphicsObject &BasicGraphicsScene::loadNodeToMap(QJsonObject nodeJson, bool
 void BasicGraphicsScene::loadConnectionToMap(QJsonObject const &connectionJson,
                                              std::unordered_map<NodeId, NodeId> const &nodeIdMap)
 {
-    ConnectionId connId = fromJson(connectionJson);
+    ConnectionId connId;
+    if (!tryFromJson(connectionJson, connId)) {
+        throw std::logic_error("Invalid serialized connection");
+    }
 
     auto const outIt = nodeIdMap.find(connId.outNodeId);
     auto const inIt = nodeIdMap.find(connId.inNodeId);
 
     if (outIt == nodeIdMap.end() || inIt == nodeIdMap.end()) {
-        return;
+        throw std::logic_error("Serialized connection references unknown node id");
     }
 
     ConnectionId remapped{outIt->second, connId.outPortIndex, inIt->second, connId.inPortIndex};
@@ -632,9 +655,11 @@ void BasicGraphicsScene::loadConnectionToMap(QJsonObject const &connectionJson,
         return;
     }
 
-    if (_graphModel.connectionPossible(remapped)) {
-        _graphModel.addConnection(remapped);
+    if (!_graphModel.connectionPossible(remapped)) {
+        throw std::logic_error("Serialized connection is not valid for restored nodes");
     }
+
+    _graphModel.addConnection(remapped);
 }
 
 std::pair<std::weak_ptr<NodeGroup>, std::unordered_map<GroupId, GroupId>>
@@ -643,6 +668,8 @@ BasicGraphicsScene::restoreGroup(QJsonObject const &groupJson)
     if (!_groupingEnabled)
         return {std::weak_ptr<NodeGroup>(), {}};
 
+    validate_group_json(groupJson);
+
     // since the new nodes will have the same IDs as in the file and the connections
     // need these old IDs to be restored, we must create new IDs and map them to the
     // old ones so the connections are properly restored
@@ -650,29 +677,42 @@ BasicGraphicsScene::restoreGroup(QJsonObject const &groupJson)
     std::unordered_map<NodeId, NodeId> nodeIdMap{};
 
     std::vector<NodeGraphicsObject *> group_children{};
+    std::vector<NodeId> createdNodeIds{};
 
-    QJsonArray nodesJson = groupJson["nodes"].toArray();
-    for (const QJsonValueRef nodeJson : nodesJson) {
-        QJsonObject nodeObject = nodeJson.toObject();
-        NodeId const oldNodeId = jsonValueToNodeId(nodeObject["id"]);
+    try {
+        QJsonArray nodesJson = groupJson["nodes"].toArray();
+        for (const QJsonValueRef nodeJson : nodesJson) {
+            QJsonObject nodeObject = nodeJson.toObject();
+            NodeId const oldNodeId = jsonValueToNodeId(nodeObject["id"]);
 
-        NodeGraphicsObject &nodeRef = loadNodeToMap(nodeObject, false);
-        NodeId const newNodeId = nodeRef.nodeId();
+            NodeGraphicsObject &nodeRef = loadNodeToMap(nodeObject, false);
+            NodeId const newNodeId = nodeRef.nodeId();
 
-        if (oldNodeId != InvalidNodeId) {
-            nodeIdMap.emplace(oldNodeId, newNodeId);
-            IDsMap.emplace(static_cast<GroupId>(oldNodeId), static_cast<GroupId>(newNodeId));
+            createdNodeIds.push_back(newNodeId);
+
+            if (oldNodeId != InvalidNodeId) {
+                nodeIdMap.emplace(oldNodeId, newNodeId);
+                IDsMap.emplace(static_cast<GroupId>(oldNodeId), static_cast<GroupId>(newNodeId));
+            }
+
+            group_children.push_back(&nodeRef);
         }
 
-        group_children.push_back(&nodeRef);
-    }
+        QJsonArray connectionJsonArray = groupJson["connections"].toArray();
+        for (auto connection : connectionJsonArray) {
+            loadConnectionToMap(connection.toObject(), nodeIdMap);
+        }
 
-    QJsonArray connectionJsonArray = groupJson["connections"].toArray();
-    for (auto connection : connectionJsonArray) {
-        loadConnectionToMap(connection.toObject(), nodeIdMap);
-    }
+        return std::make_pair(createGroup(group_children, groupJson["name"].toString()), IDsMap);
+    } catch (...) {
+        for (NodeId const nodeId : createdNodeIds) {
+            if (_graphModel.nodeExists(nodeId)) {
+                _graphModel.deleteNode(nodeId);
+            }
+        }
 
-    return std::make_pair(createGroup(group_children, groupJson["name"].toString()), IDsMap);
+        throw;
+    }
 }
 
 std::unordered_map<GroupId, std::shared_ptr<NodeGroup>> const &BasicGraphicsScene::groups() const
@@ -826,9 +866,25 @@ std::weak_ptr<NodeGroup> BasicGraphicsScene::loadGroupFile()
 
     QByteArray wholeFile = file.readAll();
 
-    const QJsonObject fileJson = QJsonDocument::fromJson(wholeFile).object();
+    QJsonParseError parseError{};
+    QJsonDocument const groupDocument = QJsonDocument::fromJson(wholeFile, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !groupDocument.isObject()) {
+        return std::weak_ptr<NodeGroup>();
+    }
 
-    return restoreGroup(fileJson).first;
+    const QJsonObject fileJson = groupDocument.object();
+
+    try {
+        validate_group_json(fileJson);
+    } catch (...) {
+        return std::weak_ptr<NodeGroup>();
+    }
+
+    try {
+        return restoreGroup(fileJson).first;
+    } catch (...) {
+        return std::weak_ptr<NodeGroup>();
+    }
 }
 
 GroupId BasicGraphicsScene::nextGroupId()
