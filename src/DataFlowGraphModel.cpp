@@ -95,23 +95,23 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
 
     // Check port bounds, i.e. that we do not connect non-existing port numbers
     auto checkPortBounds = [&](PortType const portType) {
-        NodeId const nodeId = getNodeId(portType, connectionId);
+        NodeId const nodeId = connectionNodeId(portType, connectionId);
         std::size_t const portCount = nodeData(nodeId, portCountRole(portType)).toUInt();
 
-        return getPortIndex(portType, connectionId) < portCount;
+        return connectionPortIndex(portType, connectionId) < portCount;
     };
 
     auto getDataType = [&](PortType const portType) {
-        return portData(getNodeId(portType, connectionId),
+        return portData(connectionNodeId(portType, connectionId),
                         portType,
-                        getPortIndex(portType, connectionId),
+                        connectionPortIndex(portType, connectionId),
                         PortRole::DataType)
             .value<NodeDataType>();
     };
 
     auto portVacant = [&](PortType const portType) {
-        NodeId const nodeId = getNodeId(portType, connectionId);
-        PortIndex const portIndex = getPortIndex(portType, connectionId);
+        NodeId const nodeId = connectionNodeId(portType, connectionId);
+        PortIndex const portIndex = connectionPortIndex(portType, connectionId);
         auto const &connected = connections(nodeId, portType, portIndex);
 
         auto policy = portData(nodeId, portType, portIndex, PortRole::ConnectionPolicy)
@@ -518,8 +518,8 @@ bool DataFlowGraphModel::deleteConnection(ConnectionId const connectionId)
     if (disconnected) {
         sendConnectionDeletion(connectionId);
 
-        propagateEmptyDataTo(getNodeId(PortType::In, connectionId),
-                             getPortIndex(PortType::In, connectionId));
+        propagateEmptyDataTo(connectionNodeId(PortType::In, connectionId),
+                             connectionPortIndex(PortType::In, connectionId));
     }
 
     return disconnected;
