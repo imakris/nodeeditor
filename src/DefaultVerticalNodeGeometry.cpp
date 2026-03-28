@@ -1,6 +1,7 @@
 #include "DefaultVerticalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "ConnectionIdUtils.hpp"
 
 #include <QPoint>
 #include <QRect>

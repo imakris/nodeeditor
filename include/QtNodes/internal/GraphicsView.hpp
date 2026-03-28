@@ -4,8 +4,6 @@
 
 #include "Export.hpp"
 
-#include <chrono>
-
 namespace QtNodes {
 
 class BasicGraphicsScene;
@@ -133,6 +131,8 @@ private:
     ScaleRange _scaleRange;
 
     void applyZoomStep();
+    void advanceZoomToTime(double targetTimeMs);
+    void advanceZoomAnimation(double elapsedTimerSteps);
     void applyZoomFactor(double factor);
     void stopZoomTimer();
     void applyRasterizationPolicy();
@@ -140,7 +140,10 @@ private:
     double _zoomVelocity = 0.0;
     QPointF _zoomPivot;
     int _zoomTimerId = 0;
-    std::chrono::steady_clock::time_point _lastZoomStepTime;
+    double _lastZoomStepTimeMs = 0.0;
+    bool _hasZoomStepTime = false;
+    double _zoomTimestampOffsetMs = 0.0;
+    bool _hasZoomTimestampOffset = false;
     TextRenderingPolicy _textRenderingPolicy = TextRenderingPolicy::PathAlways;
     RasterizationPolicy _rasterizationPolicy = RasterizationPolicy::Consistent;
 };

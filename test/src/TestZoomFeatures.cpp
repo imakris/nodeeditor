@@ -10,6 +10,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QApplication>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QWheelEvent>
 
 #include <vector>
@@ -18,6 +20,29 @@ using QtNodes::BasicGraphicsScene;
 using QtNodes::GraphicsView;
 using QtNodes::NodeId;
 using QtNodes::NodeRole;
+
+namespace {
+class TestGraphicsView : public GraphicsView
+{
+public:
+    using GraphicsView::GraphicsView;
+    using GraphicsView::wheelEvent;
+};
+
+void send_wheel_event(TestGraphicsView& view, quint64 timestamp)
+{
+    QWheelEvent wheelEvent(QPointF(320.0, 240.0),
+                           QPointF(320.0, 240.0),
+                           QPoint(0, 0),
+                           QPoint(0, 120),
+                           Qt::NoButton,
+                           Qt::NoModifier,
+                           Qt::ScrollPhase::NoScrollPhase,
+                           false);
+    wheelEvent.setTimestamp(timestamp);
+    view.wheelEvent(&wheelEvent);
+}
+} // namespace
 
 TEST_CASE("GraphicsView scale range", "[zoom]")
 {
@@ -144,6 +169,57 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
         CHECK(singleGap.velocity == Approx(splitGap.velocity).epsilon(1e-10));
         CHECK(singleGap.scale == Approx(fineSteps.scale).epsilon(1e-10));
         CHECK(singleGap.velocity == Approx(fineSteps.velocity).epsilon(1e-10));
+    }
+
+    SECTION("Smooth wheel zoom math ignores zero elapsed steps")
+    {
+        struct Zoom_state
+        {
+            double scale = 1.0;
+            double velocity = 0.0;
+        };
+
+        auto advanceZoom = [](double initialVelocity, std::vector<double> const &elapsedSteps) {
+            Zoom_state state{1.0, initialVelocity};
+            for (double const elapsedStep : elapsedSteps) {
+                state.scale *= GraphicsView::zoomAnimationScaleFactor(state.velocity, elapsedStep);
+                state.velocity = GraphicsView::zoomAnimationVelocityAfter(state.velocity, elapsedStep);
+            }
+            return state;
+        };
+
+        Zoom_state const zeroSteps = advanceZoom(3.0, {0.0, 0.0, 0.0});
+        CHECK(zeroSteps.scale == Approx(1.0).epsilon(1e-12));
+        CHECK(zeroSteps.velocity == Approx(3.0).epsilon(1e-12));
+    }
+
+    SECTION("Smooth wheel zoom follows input timestamps when events are batched")
+    {
+        auto delayedModel = std::make_shared<TestGraphModel>();
+        BasicGraphicsScene delayedScene(*delayedModel);
+        TestGraphicsView delayedView(&delayedScene);
+        delayedView.setupScale(1.0);
+
+        QElapsedTimer timer;
+        timer.start();
+        quint64 const firstTimestamp = static_cast<quint64>(timer.msecsSinceReference());
+        send_wheel_event(delayedView, firstTimestamp);
+        QThread::msleep(12);
+        quint64 const secondTimestamp = static_cast<quint64>(timer.msecsSinceReference());
+        send_wheel_event(delayedView, secondTimestamp);
+
+        auto batchedModel = std::make_shared<TestGraphModel>();
+        BasicGraphicsScene batchedScene(*batchedModel);
+        TestGraphicsView batchedView(&batchedScene);
+        batchedView.setupScale(1.0);
+
+        quint64 const batchedFirstTimestamp = static_cast<quint64>(timer.msecsSinceReference());
+        send_wheel_event(batchedView, batchedFirstTimestamp);
+        send_wheel_event(batchedView, batchedFirstTimestamp + (secondTimestamp - firstTimestamp));
+
+        CHECK(batchedView.getScale() == Approx(delayedView.getScale()).epsilon(1e-10));
+        CHECK(batchedView.transform().dx() == Approx(delayedView.transform().dx()).margin(0.01));
+        CHECK(batchedView.transform().dy() == Approx(delayedView.transform().dy()).margin(0.01));
     }
 }
 

@@ -18,6 +18,7 @@
 #include <QtWidgets/QMenu>
 
 #include <QtCore/QDebug>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QPointF>
 #include <QtCore/QRectF>
 
@@ -42,6 +43,13 @@ double zoom_base_k()
     static double const value = std::pow(zoom_per_notch,
                                          (1.0 - zoom_friction) / zoom_impulse_per_step);
     return value;
+}
+
+double current_input_time_ms()
+{
+    QElapsedTimer timer;
+    timer.start();
+    return static_cast<double>(timer.msecsSinceReference());
 }
 
 QPointF map_to_scene_exact(QGraphicsView const &view, QPointF const &viewPoint)
@@ -367,21 +375,38 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
         return;
     }
 
+    double const processing_time_ms = current_input_time_ms();
+    double event_time_ms = processing_time_ms;
+    if (event->timestamp() != 0u) {
+        if (!_hasZoomTimestampOffset) {
+            _zoomTimestampOffsetMs = processing_time_ms - static_cast<double>(event->timestamp());
+            _hasZoomTimestampOffset = true;
+        }
+        event_time_ms = static_cast<double>(event->timestamp()) + _zoomTimestampOffsetMs;
+    }
+
+    // Settle pending animation to the input event timestamp with the old
+    // velocity and pivot before adding the new impulse.
+    if (_zoomTimerId != 0) {
+        advanceZoomToTime(event_time_ms);
+    }
+
     double const steps = delta.y() / 120.0;
     _zoomVelocity = std::clamp(_zoomVelocity + steps * zoom_impulse_per_step,
                                -zoom_max_velocity, zoom_max_velocity);
     _zoomPivot = event->position();
 
     if (_zoomTimerId == 0 && std::abs(_zoomVelocity) >= zoom_velocity_epsilon) {
-        // Seed the timestamp one reference interval in the past so the immediate
-        // applyZoomStep() call below sees dt ≈ 1.0 and applies a full first step.
-        _lastZoomStepTime = std::chrono::steady_clock::now()
-                          - std::chrono::milliseconds(zoom_timer_interval_ms);
+        // Seed the first step one reference interval before the wheel event so
+        // the initial response stays immediate without depending on delivery
+        // latency or timer cadence.
+        _lastZoomStepTimeMs = event_time_ms - zoom_timer_interval_ms;
+        _hasZoomStepTime = true;
         _zoomTimerId = startTimer(zoom_timer_interval_ms);
         refresh_node_cache_mode(scene(), true);
     }
 
-    applyZoomStep();
+    advanceZoomToTime(std::max(event_time_ms, processing_time_ms));
 
     event->accept();
 }
@@ -425,16 +450,29 @@ void GraphicsView::applyZoomStep()
         return;
     }
 
-    auto now = std::chrono::steady_clock::now();
-    double elapsed_ms = std::chrono::duration<double, std::milli>(now - _lastZoomStepTime).count();
-    _lastZoomStepTime = now;
+    advanceZoomToTime(current_input_time_ms());
+}
 
-    if (elapsed_ms <= 0.0) {
-        elapsed_ms = zoom_timer_interval_ms;
+void GraphicsView::advanceZoomToTime(double targetTimeMs)
+{
+    if (!_hasZoomStepTime) {
+        _lastZoomStepTimeMs = targetTimeMs;
+        _hasZoomStepTime = true;
+        return;
     }
 
-    double const dt = elapsed_ms / zoom_timer_interval_ms;
-    double const factor = zoomAnimationScaleFactor(_zoomVelocity, dt);
+    if (targetTimeMs <= _lastZoomStepTimeMs) {
+        return;
+    }
+
+    double const elapsed_ms = targetTimeMs - _lastZoomStepTimeMs;
+    _lastZoomStepTimeMs = targetTimeMs;
+    advanceZoomAnimation(elapsed_ms / zoom_timer_interval_ms);
+}
+
+void GraphicsView::advanceZoomAnimation(double elapsedTimerSteps)
+{
+    double const factor = zoomAnimationScaleFactor(_zoomVelocity, elapsedTimerSteps);
     double const current_scale = transform().m11();
     double const new_scale = current_scale * factor;
 
@@ -450,7 +488,7 @@ void GraphicsView::applyZoomStep()
     }
 
     applyZoomFactor(factor);
-    _zoomVelocity = zoomAnimationVelocityAfter(_zoomVelocity, dt);
+    _zoomVelocity = zoomAnimationVelocityAfter(_zoomVelocity, elapsedTimerSteps);
 }
 
 void GraphicsView::applyZoomFactor(double factor)
@@ -507,6 +545,10 @@ void GraphicsView::stopZoomTimer()
     }
 
     _zoomVelocity = 0.0;
+    _lastZoomStepTimeMs = 0.0;
+    _hasZoomStepTime = false;
+    _zoomTimestampOffsetMs = 0.0;
+    _hasZoomTimestampOffset = false;
 
     if (was_zoom_animating) {
         refresh_node_cache_mode(scene(), true);
