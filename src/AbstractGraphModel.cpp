@@ -24,12 +24,8 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
     auto clampedLast = std::min(last, portCount - 1);
 
     for (PortIndex portIndex = first; portIndex <= clampedLast; ++portIndex) {
-        std::vector<ConnectionId> conns;
         auto const &attachedConnections = connections(nodeId, portType, portIndex);
-        conns.reserve(attachedConnections.size());
-        for (auto const &connectionId : attachedConnections) {
-            conns.push_back(connectionId);
-        }
+        std::vector<ConnectionId> const conns(attachedConnections.begin(), attachedConnections.end());
 
         for (auto const connectionId : conns) {
             deleteConnection(connectionId);
@@ -39,12 +35,8 @@ void AbstractGraphModel::portsAboutToBeDeleted(NodeId const nodeId,
     std::size_t const nRemovedPorts = clampedLast - first + 1;
 
     for (PortIndex portIndex = clampedLast + 1; portIndex < portCount; ++portIndex) {
-        std::vector<ConnectionId> conns;
         auto const &attachedConnections = connections(nodeId, portType, portIndex);
-        conns.reserve(attachedConnections.size());
-        for (auto const &connectionId : attachedConnections) {
-            conns.push_back(connectionId);
-        }
+        std::vector<ConnectionId> const conns(attachedConnections.begin(), attachedConnections.end());
 
         for (auto const connectionId : conns) {
             // Erases the information about the port on one side;
@@ -88,12 +80,8 @@ void AbstractGraphModel::portsAboutToBeInserted(NodeId const nodeId,
     std::size_t const nNewPorts = last - first + 1;
 
     for (PortIndex portIndex = first; portIndex < portCount; ++portIndex) {
-        std::vector<ConnectionId> conns;
         auto const &attachedConnections = connections(nodeId, portType, portIndex);
-        conns.reserve(attachedConnections.size());
-        for (auto const &connectionId : attachedConnections) {
-            conns.push_back(connectionId);
-        }
+        std::vector<ConnectionId> const conns(attachedConnections.begin(), attachedConnections.end());
 
         for (auto const connectionId : conns) {
             // Erases the information about the port on one side;

@@ -301,14 +301,14 @@ QVariant DataFlowGraphModel::nodeData(NodeId nodeId, NodeRole role) const
         break;
 
     case NodeRole::Style: {
-        auto style = _models.at(nodeId)->nodeStyle();
+        auto style = model->nodeStyle();
         result = style.toJson().toVariantMap();
     } break;
 
     case NodeRole::InternalData: {
         QJsonObject nodeJson;
 
-        nodeJson["internal-data"] = _models.at(nodeId)->save();
+        nodeJson["internal-data"] = model->save();
 
         result = nodeJson.toVariantMap();
         break;

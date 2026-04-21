@@ -7,6 +7,8 @@
 
 #include <catch2/catch.hpp>
 
+#include <stdexcept>
+
 using QtNodes::ConnectionId;
 using QtNodes::DataFlowGraphModel;
 using QtNodes::InvalidNodeId;
@@ -166,5 +168,10 @@ TEST_CASE("DataFlowGraphModel serialization support", "[dataflow]")
         CHECK_FALSE(fullJson.isEmpty());
         CHECK(fullJson.contains("nodes"));
         CHECK(fullJson.contains("connections"));
+    }
+
+    SECTION("Saving a missing node fails loudly")
+    {
+        CHECK_THROWS_AS(model.saveNode(InvalidNodeId), std::out_of_range);
     }
 }

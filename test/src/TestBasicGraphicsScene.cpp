@@ -5,6 +5,7 @@
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/NodeRenderingUtils.hpp>
 #include <QtNodes/internal/StyleCollection.hpp>
+#include <QtNodes/internal/locateNode.hpp>
 
 #include <catch2/catch.hpp>
 
@@ -16,6 +17,7 @@
 using QtNodes::BasicGraphicsScene;
 using QtNodes::ConnectionId;
 using QtNodes::NodeId;
+using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeRole;
 
 namespace {
@@ -197,4 +199,35 @@ TEST_CASE("Node shadow bounds follow visual margins", "[graphics]")
         CHECK(bounds.right() == Approx(size.width() + margins.right()));
         CHECK(bounds.bottom() == Approx(size.height() + margins.bottom()));
     }
+}
+
+TEST_CASE("locateNodeAt returns the top-most node hit", "[graphics]")
+{
+    auto app = applicationSetup();
+    TestGraphModel model;
+    BasicGraphicsScene scene(model);
+
+    NodeId const node1 = model.addNode("Node1");
+    NodeId const node2 = model.addNode("Node2");
+
+    QPointF const sharedPos(100, 100);
+    model.setNodeData(node1, NodeRole::Position, sharedPos);
+    model.setNodeData(node2, NodeRole::Position, sharedPos);
+    QCoreApplication::processEvents();
+
+    QPointF const scenePoint = sharedPos + QPointF(20, 20);
+
+    NodeGraphicsObject *expected = nullptr;
+    for (QGraphicsItem *item : scene.items(scenePoint,
+                                           Qt::IntersectsItemShape,
+                                           Qt::DescendingOrder,
+                                           QTransform())) {
+        if (auto *node = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
+            expected = node;
+            break;
+        }
+    }
+
+    REQUIRE(expected != nullptr);
+    CHECK(QtNodes::locateNodeAt(scenePoint, scene, QTransform()) == expected);
 }
