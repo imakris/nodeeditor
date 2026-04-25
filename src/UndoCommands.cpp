@@ -23,13 +23,7 @@ namespace {
 
 NodeId json_value_to_node_id(QJsonValue const &value)
 {
-    NodeId nodeId = InvalidNodeId;
-
-    if (!detail::read_node_id(value, nodeId)) {
-        throw std::logic_error("Invalid node id in serialized command payload");
-    }
-
-    return nodeId;
+    return detail::read_node_id_or_throw(value, "Invalid node id in serialized command payload");
 }
 
 ConnectionId connection_id_from_json(QJsonObject const &connJson)
@@ -45,13 +39,8 @@ ConnectionId connection_id_from_json(QJsonObject const &connJson)
 
 QPointF point_from_json(QJsonObject const &json, QString const &key)
 {
-    QPointF point;
-
-    if (!detail::read_required_point(json, key, point)) {
-        throw std::logic_error("Invalid node position in serialized command payload");
-    }
-
-    return point;
+    return detail::read_required_point_or_throw(
+        json, key, "Invalid node position in serialized command payload");
 }
 
 } // namespace
@@ -334,14 +323,6 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
             groupJson["locked"] = groupGo->locked();
             groupJson["nodes"] = groupNodeIdsJsonArray;
             groupsJsonArray.append(groupJson);
-        }
-    }
-
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto group = qgraphicsitem_cast<GroupGraphicsObject *>(item)) {
-            for (auto *node : group->group().childNodes()) {
-                appendNode(node);
-            }
         }
     }
 

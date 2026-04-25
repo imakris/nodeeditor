@@ -6,9 +6,6 @@
 #include <QJsonObject>
 #include <QtCore/QtGlobal>
 
-#include <iostream>
-#include <string>
-
 namespace QtNodes {
 
 inline NodeId connectionNodeId(PortType portType, ConnectionId const &connectionId) noexcept
@@ -47,16 +44,6 @@ inline PortType oppositePort(PortType port) noexcept
     default:
         return PortType::None;
     }
-}
-
-inline bool isPortIndexValid(PortIndex index) noexcept
-{
-    return index != InvalidPortIndex;
-}
-
-inline bool isPortTypeValid(PortType portType) noexcept
-{
-    return portType != PortType::None;
 }
 
 /**
@@ -102,19 +89,6 @@ inline ConnectionId makeCompleteConnectionId(ConnectionId incompleteConnectionId
     }
 
     return incompleteConnectionId;
-}
-
-inline std::ostream &operator<<(std::ostream &ostr, ConnectionId const connectionId)
-{
-    ostr << "(" << connectionId.outNodeId << ", "
-         << (isPortIndexValid(connectionId.outPortIndex) ? std::to_string(connectionId.outPortIndex)
-                                                         : "INVALID")
-         << ", " << connectionId.inNodeId << ", "
-         << (isPortIndexValid(connectionId.inPortIndex) ? std::to_string(connectionId.inPortIndex)
-                                                        : "INVALID")
-         << ")" << std::endl;
-
-    return ostr;
 }
 
 inline QJsonObject toJson(ConnectionId const &connId)

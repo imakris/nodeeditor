@@ -412,14 +412,6 @@ std::vector<NodeGraphicsObject *> BasicGraphicsScene::selectedNodes() const
     return selectedItemsOfType<NodeGraphicsObject>(this);
 }
 
-std::vector<GroupGraphicsObject *> BasicGraphicsScene::selectedGroups() const
-{
-    if (!_groupingEnabled)
-        return {};
-
-    return selectedItemsOfType<GroupGraphicsObject>(this);
-}
-
 std::weak_ptr<QtNodes::NodeGroup> BasicGraphicsScene::createGroupFromSelection(QString groupName)
 {
     if (!_groupingEnabled)

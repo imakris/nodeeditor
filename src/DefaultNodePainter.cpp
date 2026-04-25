@@ -464,6 +464,24 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
     painter->drawRoundedRect(boundary, radius, radius);
 }
 
+namespace {
+
+template<typename Body>
+void for_each_port(AbstractGraphModel &model,
+                   AbstractNodeGeometry &geometry,
+                   NodeId const nodeId,
+                   Body &&body)
+{
+    for (PortType portType : {PortType::Out, PortType::In}) {
+        size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
+        for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
+            body(portType, portIndex, geometry.portPosition(nodeId, portType, portIndex));
+        }
+    }
+}
+
+} // namespace
+
 void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle) const
 {
     AbstractGraphModel &model = ngo.graphModel();
@@ -471,58 +489,43 @@ void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObj
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
     auto const &connectionStyle = StyleCollection::connectionStyle();
+    double const reducedDiameter = nodeStyle.ConnectionPointDiameter * 0.6;
 
-    float diameter = nodeStyle.ConnectionPointDiameter;
-    auto reducedDiameter = diameter * 0.6;
+    for_each_port(model, geometry, nodeId,
+                  [&](PortType portType, PortIndex portIndex, QPointF const &p) {
+        auto const &dataType = model.portData(nodeId, portType, portIndex, PortRole::DataType)
+                                   .value<NodeDataType>();
 
-    for (PortType portType : {PortType::Out, PortType::In}) {
-        size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
+        double r = 1.0;
 
-        for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
-            QPointF p = geometry.portPosition(nodeId, portType, portIndex);
+        if (auto const *cgo = ngo.nodeState().connectionForReaction()) {
+            PortType requiredPort = cgo->connectionState().requiredPort();
 
-            auto const &dataType = model.portData(nodeId, portType, portIndex, PortRole::DataType)
-                                       .value<NodeDataType>();
+            if (requiredPort == portType) {
+                ConnectionId const possibleConnectionId
+                    = makeCompleteConnectionId(cgo->connectionId(), nodeId, portIndex);
 
-            double r = 1.0;
+                bool const possible = model.connectionPossible(possibleConnectionId);
 
-            NodeState const &state = ngo.nodeState();
+                QPointF cp = cgo->sceneTransform().map(cgo->endPoint(requiredPort));
+                cp = ngo.sceneTransform().inverted().map(cp);
 
-            if (auto const *cgo = state.connectionForReaction()) {
-                PortType requiredPort = cgo->connectionState().requiredPort();
+                QPointF const diff = cp - p;
+                double const dist = std::sqrt(QPointF::dotProduct(diff, diff));
 
-                if (requiredPort == portType) {
-                    ConnectionId possibleConnectionId = makeCompleteConnectionId(cgo->connectionId(),
-                                                                                 nodeId,
-                                                                                 portIndex);
-
-                    bool const possible = model.connectionPossible(possibleConnectionId);
-
-                    auto cp = cgo->sceneTransform().map(cgo->endPoint(requiredPort));
-                    cp = ngo.sceneTransform().inverted().map(cp);
-
-                    auto diff = cp - p;
-                    double dist = std::sqrt(QPointF::dotProduct(diff, diff));
-
-                    if (possible) {
-                        double const thres = 40.0;
-                        r = (dist < thres) ? (2.0 - dist / thres) : 1.0;
-                    } else {
-                        double const thres = 80.0;
-                        r = (dist < thres) ? (dist / thres) : 1.0;
-                    }
-                }
+                double const thres = possible ? 40.0 : 80.0;
+                r = (dist < thres) ? (possible ? (2.0 - dist / thres) : (dist / thres)) : 1.0;
             }
-
-            if (connectionStyle.useDataDefinedColors()) {
-                painter->setBrush(connectionStyle.normalColor(dataType.id));
-            } else {
-                painter->setBrush(nodeStyle.ConnectionPointColor);
-            }
-
-            painter->drawEllipse(p, reducedDiameter * r, reducedDiameter * r);
         }
-    }
+
+        if (connectionStyle.useDataDefinedColors()) {
+            painter->setBrush(connectionStyle.normalColor(dataType.id));
+        } else {
+            painter->setBrush(nodeStyle.ConnectionPointColor);
+        }
+
+        painter->drawEllipse(p, reducedDiameter * r, reducedDiameter * r);
+    });
 
     if (ngo.nodeState().connectionForReaction()) {
         ngo.nodeState().resetConnectionForReaction();
@@ -535,35 +538,29 @@ void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraph
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
-    auto diameter = nodeStyle.ConnectionPointDiameter;
+    auto const &connectionStyle = StyleCollection::connectionStyle();
+    double const radius = nodeStyle.ConnectionPointDiameter * 0.4;
 
-    for (PortType portType : {PortType::Out, PortType::In}) {
-        size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
-
-        for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
-            QPointF p = geometry.portPosition(nodeId, portType, portIndex);
-
-            auto const &connected = model.connections(nodeId, portType, portIndex);
-
-            if (!connected.empty()) {
-                auto const &dataType = model
-                                           .portData(nodeId, portType, portIndex, PortRole::DataType)
-                                           .value<NodeDataType>();
-
-                auto const &connectionStyle = StyleCollection::connectionStyle();
-                if (connectionStyle.useDataDefinedColors()) {
-                    QColor const c = connectionStyle.normalColor(dataType.id);
-                    painter->setPen(c);
-                    painter->setBrush(c);
-                } else {
-                    painter->setPen(nodeStyle.FilledConnectionPointColor);
-                    painter->setBrush(nodeStyle.FilledConnectionPointColor);
-                }
-
-                painter->drawEllipse(p, diameter * 0.4, diameter * 0.4);
-            }
+    for_each_port(model, geometry, nodeId,
+                  [&](PortType portType, PortIndex portIndex, QPointF const &p) {
+        auto const &connected = model.connections(nodeId, portType, portIndex);
+        if (connected.empty()) {
+            return;
         }
-    }
+
+        QColor color;
+        if (connectionStyle.useDataDefinedColors()) {
+            auto const &dataType = model.portData(nodeId, portType, portIndex, PortRole::DataType)
+                                       .value<NodeDataType>();
+            color = connectionStyle.normalColor(dataType.id);
+        } else {
+            color = nodeStyle.FilledConnectionPointColor;
+        }
+
+        painter->setPen(color);
+        painter->setBrush(color);
+        painter->drawEllipse(p, radius, radius);
+    });
 }
 
 void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &ngo, NodeStyle const &nodeStyle, GraphicsView *view) const
