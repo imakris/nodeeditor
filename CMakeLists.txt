@@ -84,6 +84,7 @@ set(CPP_SOURCE_FILES
   src/NodeDelegateModelRegistry.cpp
   src/NodeGraphicsObject.cpp
   src/NodeRenderingUtils.cpp
+  src/NodeShadowAtlas.cpp
   src/NodeState.cpp
   src/NodeStyle.cpp
   src/StyleCollection.cpp
@@ -120,7 +121,9 @@ set(HPP_HEADER_FILES
   include/QtNodes/internal/NodeDelegateModelRegistry.hpp
   include/QtNodes/internal/NodeGraphicsObject.hpp
   include/QtNodes/internal/NodeRenderingUtils.hpp
+  include/QtNodes/internal/NodeShadowAtlas.hpp
   include/QtNodes/internal/NodeState.hpp
+  include/QtNodes/internal/SelectionUtils.hpp
   include/QtNodes/internal/NodeStyle.hpp
   include/QtNodes/internal/OperatingSystem.hpp
   include/QtNodes/internal/QStringStdHash.hpp
