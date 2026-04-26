@@ -69,7 +69,6 @@ public:
 
     QColor WarningColor;
     QColor ErrorColor;
-    QColor ToolTipIconColor;
 
     float PenWidth{0.0f};
     float HoveredPenWidth{0.0f};

@@ -31,17 +31,6 @@ using QtNodes::InvalidGroupId;
 using QtNodes::InvalidNodeId;
 using QtNodes::NodeId;
 
-NodeId json_value_to_node_id(QJsonValue const &value)
-{
-    NodeId nodeId = InvalidNodeId;
-
-    if (!QtNodes::detail::read_node_id(value, nodeId)) {
-        return InvalidNodeId;
-    }
-
-    return nodeId;
-}
-
 void validate_group_json(QJsonObject const &groupJson)
 {
     QString groupName;
@@ -189,10 +178,8 @@ NodeGraphicsObject &BasicGraphicsScene::loadNodeToMap(QJsonObject nodeJson, bool
     NodeId newNodeId = InvalidNodeId;
 
     if (keepOriginalId) {
-        newNodeId = json_value_to_node_id(nodeJson["id"]);
-        if (newNodeId == InvalidNodeId) {
-            throw std::logic_error("Invalid node id in serialized node");
-        }
+        newNodeId = detail::read_node_id_or_throw(nodeJson["id"],
+                                                  "Invalid node id in serialized node");
     } else {
         newNodeId = _graphModel.newNodeId();
         nodeJson["id"] = static_cast<qint64>(newNodeId);
@@ -255,7 +242,8 @@ BasicGraphicsScene::restoreGroup(QJsonObject const &groupJson)
         QJsonArray const nodesJson = groupJson["nodes"].toArray();
         for (QJsonValue const &nodeJson : nodesJson) {
             QJsonObject nodeObject = nodeJson.toObject();
-            NodeId const oldNodeId = json_value_to_node_id(nodeObject["id"]);
+            NodeId oldNodeId = InvalidNodeId;
+            detail::read_node_id(nodeObject["id"], oldNodeId);
 
             NodeGraphicsObject &nodeRef = loadNodeToMap(nodeObject, false);
             NodeId const newNodeId = nodeRef.nodeId();

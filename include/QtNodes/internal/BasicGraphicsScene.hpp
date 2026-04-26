@@ -159,12 +159,6 @@ public:
     std::vector<NodeGraphicsObject *> selectedNodes() const;
 
     /**
-     * @brief Calculates the selected groups.
-     * @return Vector containing the GroupGraphicsObject pointers related to the selected groups.
-     */
-    std::vector<GroupGraphicsObject *> selectedGroups() const;
-
-    /**
      * @brief Adds a node to a group, if both node and group exists.
      * @param nodeId Node's id.
      * @param groupId Group's id.

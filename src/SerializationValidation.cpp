@@ -1,6 +1,7 @@
 #include "SerializationValidation.hpp"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace QtNodes::detail {
 
@@ -144,6 +145,24 @@ bool read_required_point(QJsonObject const &obj, QString const &key, QPointF &re
 
     result = QPointF(x, y);
     return true;
+}
+
+QPointF read_required_point_or_throw(QJsonObject const &obj, QString const &key, char const *errorMessage)
+{
+    QPointF point;
+    if (!read_required_point(obj, key, point)) {
+        throw std::logic_error(errorMessage);
+    }
+    return point;
+}
+
+NodeId read_node_id_or_throw(QJsonValue const &value, char const *errorMessage)
+{
+    NodeId nodeId = InvalidNodeId;
+    if (!read_node_id(value, nodeId)) {
+        throw std::logic_error(errorMessage);
+    }
+    return nodeId;
 }
 
 } // namespace QtNodes::detail

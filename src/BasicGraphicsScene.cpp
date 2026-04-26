@@ -11,6 +11,7 @@
 #include "GraphicsView.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "SelectionUtils.hpp"
 
 #include <QUndoStack>
 
@@ -388,36 +389,9 @@ void BasicGraphicsScene::freezeModelAndConnections(bool isFreeze)
     }
 }
 
-namespace {
-template<typename T>
-std::vector<T *> selectedItemsOfType(QGraphicsScene const *scene)
-{
-    QList<QGraphicsItem *> graphicsItems = scene->selectedItems();
-
-    std::vector<T *> result;
-    result.reserve(graphicsItems.size());
-
-    for (QGraphicsItem *item : graphicsItems) {
-        if (auto typed = qgraphicsitem_cast<T *>(item)) {
-            result.push_back(typed);
-        }
-    }
-
-    return result;
-}
-} // namespace
-
 std::vector<NodeGraphicsObject *> BasicGraphicsScene::selectedNodes() const
 {
-    return selectedItemsOfType<NodeGraphicsObject>(this);
-}
-
-std::vector<GroupGraphicsObject *> BasicGraphicsScene::selectedGroups() const
-{
-    if (!_groupingEnabled)
-        return {};
-
-    return selectedItemsOfType<GroupGraphicsObject>(this);
+    return detail::selected_items_of_type<NodeGraphicsObject>(this);
 }
 
 std::weak_ptr<QtNodes::NodeGroup> BasicGraphicsScene::createGroupFromSelection(QString groupName)
