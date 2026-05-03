@@ -13,31 +13,6 @@
 
 namespace QtNodes {
 
-namespace {
-
-NodeId json_value_to_node_id(QJsonValue const &value)
-{
-    NodeId nodeId = InvalidNodeId;
-
-    if (!detail::read_node_id(value, nodeId)) {
-        return InvalidNodeId;
-    }
-
-    return nodeId;
-}
-
-QPointF json_object_to_point(QJsonObject const &obj, QString const &key)
-{
-    QPointF point;
-
-    if (!detail::read_required_point(obj, key, point)) {
-        throw std::logic_error("Invalid node position in serialized node");
-    }
-
-    return point;
-}
-
-} // namespace
 
 DataFlowGraphModel::DataFlowGraphModel(std::shared_ptr<NodeDelegateModelRegistry> registry)
     : _registry(std::move(registry))
@@ -596,10 +571,8 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
     // loading.
     // 2. When undoing the deletion command.  Conflict is not possible
     // because all the new ids were created past the removed nodes.
-    NodeId restoredNodeId = json_value_to_node_id(nodeJson["id"]);
-    if (restoredNodeId == InvalidNodeId) {
-        throw std::logic_error("Invalid node id in serialized node");
-    }
+    NodeId restoredNodeId
+        = detail::read_node_id_or_throw(nodeJson["id"], "Invalid node id in serialized node");
 
     if (_models.find(restoredNodeId) != _models.end()) {
         throw std::logic_error("Node identifier collision in serialized node");
@@ -619,7 +592,9 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
         throw std::logic_error("Missing model-name in serialized node");
     }
 
-    QPointF const pos = json_object_to_point(nodeJson, "position");
+    QPointF const pos
+        = detail::read_required_point_or_throw(nodeJson, "position",
+                                               "Invalid node position in serialized node");
 
     std::unique_ptr<NodeDelegateModel> model = _registry->create(delegateModelName);
 
@@ -686,8 +661,10 @@ void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
 
     try {
         for (QJsonValueRef nodeJson : nodesJsonArray) {
-            NodeId const nodeId = json_value_to_node_id(nodeJson.toObject()["id"]);
-            loadNode(nodeJson.toObject());
+            QJsonObject const nodeObj = nodeJson.toObject();
+            NodeId nodeId = InvalidNodeId;
+            detail::read_node_id(nodeObj["id"], nodeId);
+            loadNode(nodeObj);
             loadedNodeIds.push_back(nodeId);
         }
 

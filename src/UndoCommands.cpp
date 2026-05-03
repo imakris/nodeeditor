@@ -6,6 +6,7 @@
 #include "Definitions.hpp"
 #include "GroupGraphicsObject.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "selection_utils.hpp"
 #include "SerializationValidation.hpp"
 
 #include <stdexcept>
@@ -23,13 +24,7 @@ namespace {
 
 NodeId json_value_to_node_id(QJsonValue const &value)
 {
-    NodeId nodeId = InvalidNodeId;
-
-    if (!detail::read_node_id(value, nodeId)) {
-        throw std::logic_error("Invalid node id in serialized command payload");
-    }
-
-    return nodeId;
+    return detail::read_node_id_or_throw(value, "Invalid node id in serialized command payload");
 }
 
 ConnectionId connection_id_from_json(QJsonObject const &connJson)
@@ -45,13 +40,8 @@ ConnectionId connection_id_from_json(QJsonObject const &connJson)
 
 QPointF point_from_json(QJsonObject const &json, QString const &key)
 {
-    QPointF point;
-
-    if (!detail::read_required_point(json, key, point)) {
-        throw std::logic_error("Invalid node position in serialized command payload");
-    }
-
-    return point;
+    return detail::read_required_point_or_throw(
+        json, key, "Invalid node position in serialized command payload");
 }
 
 } // namespace
@@ -90,19 +80,13 @@ static QJsonObject serializeSelectedItems(BasicGraphicsScene *scene)
         }
     };
 
-    for (QGraphicsItem *item : scene->selectedItems()) {
-        if (auto group = qgraphicsitem_cast<GroupGraphicsObject *>(item)) {
-            for (auto *node : group->group().childNodes()) {
-                appendNode(node);
-            }
+    detail::for_each_selected<GroupGraphicsObject>(scene, [&](GroupGraphicsObject *group) {
+        for (auto *node : group->group().childNodes()) {
+            appendNode(node);
         }
-    }
+    });
 
-    for (QGraphicsItem *item : scene->selectedItems()) {
-        if (auto ngo = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-            appendNode(ngo);
-        }
-    }
+    detail::for_each_selected<NodeGraphicsObject>(scene, appendNode);
 
     for (NodeId const nodeId : selectedNodes) {
         for (auto const &connectionId : graphModel.allConnectionIds(nodeId)) {
@@ -110,30 +94,26 @@ static QJsonObject serializeSelectedItems(BasicGraphicsScene *scene)
         }
     }
 
-    for (QGraphicsItem *item : scene->selectedItems()) {
-        if (auto groupGo = qgraphicsitem_cast<GroupGraphicsObject *>(item)) {
-            auto &group = groupGo->group();
+    detail::for_each_selected<GroupGraphicsObject>(scene, [&](GroupGraphicsObject *groupGo) {
+        auto &group = groupGo->group();
 
-            QJsonObject groupJson;
-            groupJson["id"] = static_cast<qint64>(group.id());
-            groupJson["name"] = group.name();
-            groupJson["locked"] = groupGo->locked();
+        QJsonObject groupJson;
+        groupJson["id"] = static_cast<qint64>(group.id());
+        groupJson["name"] = group.name();
+        groupJson["locked"] = groupGo->locked();
 
-            QJsonArray nodeIdsJson;
-            for (NodeGraphicsObject *node : group.childNodes()) {
-                nodeIdsJson.append(static_cast<qint64>(node->nodeId()));
-            }
-
-            groupJson["nodes"] = nodeIdsJson;
-            groupsJsonArray.append(groupJson);
+        QJsonArray nodeIdsJson;
+        for (NodeGraphicsObject *node : group.childNodes()) {
+            nodeIdsJson.append(static_cast<qint64>(node->nodeId()));
         }
-    }
 
-    for (QGraphicsItem *item : scene->selectedItems()) {
-        if (auto c = qgraphicsitem_cast<ConnectionGraphicsObject *>(item)) {
-            appendConnection(c->connectionId());
-        }
-    }
+        groupJson["nodes"] = nodeIdsJson;
+        groupsJsonArray.append(groupJson);
+    });
+
+    detail::for_each_selected<ConnectionGraphicsObject>(scene, [&](ConnectionGraphicsObject *c) {
+        appendConnection(c->connectionId());
+    });
 
     serializedScene["groups"] = groupsJsonArray;
     serializedScene["nodes"] = nodesJsonArray;
@@ -287,13 +267,10 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
     // Delete the selected connections first, ensuring that they won't be
     // automatically deleted when selected nodes are deleted (deleting a
     // node deletes some connections as well)
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto c = qgraphicsitem_cast<ConnectionGraphicsObject *>(item)) {
-            auto const &cid = c->connectionId();
-
-            connJsonArray.append(toJson(cid));
-        }
-    }
+    detail::for_each_selected<ConnectionGraphicsObject>(
+        _scene, [&](ConnectionGraphicsObject *c) {
+            connJsonArray.append(toJson(c->connectionId()));
+        });
 
     QJsonArray nodesJsonArray;
     // Delete the nodes; this will delete many of the connections.
@@ -318,38 +295,24 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
 
     QJsonArray groupsJsonArray;
 
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto groupGo = qgraphicsitem_cast<GroupGraphicsObject *>(item)) {
-            auto &groupData = groupGo->group();
+    detail::for_each_selected<GroupGraphicsObject>(_scene, [&](GroupGraphicsObject *groupGo) {
+        auto &groupData = groupGo->group();
 
-            QJsonArray groupNodeIdsJsonArray;
-            for (NodeGraphicsObject *node : groupData.childNodes()) {
-                appendNode(node);
-                groupNodeIdsJsonArray.append(static_cast<qint64>(node->nodeId()));
-            }
-
-            QJsonObject groupJson;
-            groupJson["id"] = static_cast<qint64>(groupData.id());
-            groupJson["name"] = groupData.name();
-            groupJson["locked"] = groupGo->locked();
-            groupJson["nodes"] = groupNodeIdsJsonArray;
-            groupsJsonArray.append(groupJson);
+        QJsonArray groupNodeIdsJsonArray;
+        for (NodeGraphicsObject *node : groupData.childNodes()) {
+            appendNode(node);
+            groupNodeIdsJsonArray.append(static_cast<qint64>(node->nodeId()));
         }
-    }
 
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto group = qgraphicsitem_cast<GroupGraphicsObject *>(item)) {
-            for (auto *node : group->group().childNodes()) {
-                appendNode(node);
-            }
-        }
-    }
+        QJsonObject groupJson;
+        groupJson["id"] = static_cast<qint64>(groupData.id());
+        groupJson["name"] = groupData.name();
+        groupJson["locked"] = groupGo->locked();
+        groupJson["nodes"] = groupNodeIdsJsonArray;
+        groupsJsonArray.append(groupJson);
+    });
 
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto n = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-            appendNode(n);
-        }
-    }
+    detail::for_each_selected<NodeGraphicsObject>(_scene, appendNode);
 
     // If nothing is deleted, cancel this operation
     if (connJsonArray.isEmpty() && nodesJsonArray.isEmpty() && groupsJsonArray.isEmpty())
@@ -456,16 +419,12 @@ void PasteCommand::redo()
     try {
         insertSerializedItems(_newSceneJson, _scene);
     } catch (...) {
-        // If the paste does not work, delete all selected nodes and connections
-        // `deleteNode(...)` implicitly removed connections
+        // If the paste does not work, delete all selected nodes.
+        // `deleteNode(...)` implicitly removes their connections.
         auto &graphModel = _scene->graphModel();
-
-        QJsonArray nodesJsonArray;
-        for (QGraphicsItem *item : _scene->selectedItems()) {
-            if (auto n = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-                graphModel.deleteNode(n->nodeId());
-            }
-        }
+        detail::for_each_selected<NodeGraphicsObject>(_scene, [&](NodeGraphicsObject *n) {
+            graphModel.deleteNode(n->nodeId());
+        });
 
         setObsolete(true);
     }
@@ -608,12 +567,9 @@ MoveNodeCommand::MoveNodeCommand(BasicGraphicsScene *scene, QPointF const &diff)
     : _scene(scene)
     , _diff(diff)
 {
-    _selectedNodes.clear();
-    for (QGraphicsItem *item : _scene->selectedItems()) {
-        if (auto n = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-            _selectedNodes.insert(n->nodeId());
-        }
-    }
+    detail::for_each_selected<NodeGraphicsObject>(_scene, [&](NodeGraphicsObject *n) {
+        _selectedNodes.insert(n->nodeId());
+    });
 }
 
 void MoveNodeCommand::undo()

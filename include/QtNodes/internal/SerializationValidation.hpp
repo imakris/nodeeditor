@@ -30,4 +30,10 @@ bool read_optional_bool(QJsonObject const &obj, QString const &key, bool &result
 
 bool read_required_point(QJsonObject const &obj, QString const &key, QPointF &result);
 
+/// Reads a required point from `obj[key]` and throws std::logic_error with `errorMessage` on failure.
+QPointF read_required_point_or_throw(QJsonObject const& obj, QString const& key, char const* errorMessage);
+
+/// Reads a NodeId from a QJsonValue and throws std::logic_error with `errorMessage` on failure.
+NodeId read_node_id_or_throw(QJsonValue const& value, char const* errorMessage);
+
 } // namespace QtNodes::detail

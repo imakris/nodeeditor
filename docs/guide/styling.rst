@@ -97,7 +97,6 @@ Controls node appearance:
        "FilledConnectionPointColor": "cyan",
        "ErrorColor": [211, 47, 47],
        "WarningColor": [255, 179, 0],
-       "ToolTipIconColor": "white",
        "PenWidth": 1.0,
        "HoveredPenWidth": 1.5,
        "ConnectionPointDiameter": 8.0,
