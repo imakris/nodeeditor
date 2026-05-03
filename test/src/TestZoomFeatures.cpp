@@ -128,6 +128,8 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
 
     SECTION("Smooth wheel zoom settles back to a clean transform")
     {
+        view.setRasterizationPolicy(GraphicsView::RasterizationPolicy::Crisp);
+
         QWheelEvent wheelEvent(QPointF(320.0, 240.0),
                                view.mapToGlobal(QPoint(320, 240)),
                                QPoint(0, 0),
@@ -137,7 +139,7 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
                                Qt::ScrollPhase::NoScrollPhase,
                                false);
         QApplication::sendEvent(view.viewport(), &wheelEvent);
-        QTest::qWait(500);
+        QTRY_VERIFY_WITH_TIMEOUT(!view.isZoomAnimating(), 2000);
 
         CHECK(view.transform().dx() == Approx(0.0).margin(0.01));
         CHECK(view.transform().dy() == Approx(0.0).margin(0.01));

@@ -406,7 +406,7 @@ void GraphicsView::wheelEvent(QWheelEvent *event)
         refresh_node_cache_mode(scene(), true);
     }
 
-    advanceZoomToTime(std::max(event_time_ms, processing_time_ms));
+    advanceZoomToTime(event_time_ms);
 
     event->accept();
 }

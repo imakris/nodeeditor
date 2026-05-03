@@ -85,12 +85,12 @@ std::set<NodeId> toNodeIdSet(std::vector<NodeId> const &ids)
 QRectF groupSceneRect(NodeGroup const &group)
 {
     auto const &groupGraphics = group.groupGraphicsObject();
-    return groupGraphics.mapRectToScene(groupGraphics.rect()).boundingRect();
+    return groupGraphics.mapRectToScene(groupGraphics.rect());
 }
 
 QRectF nodeSceneRect(NodeGraphicsObject const &node)
 {
-    return node.mapRectToScene(node.boundingRect()).boundingRect();
+    return node.mapRectToScene(node.boundingRect());
 }
 
 } // namespace
