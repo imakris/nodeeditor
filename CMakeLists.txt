@@ -29,7 +29,6 @@ set(QT_NODES_DEVELOPER_DEFAULTS "${is_root_project}" CACHE BOOL "Turns on defaul
 option(BUILD_TESTING "Build tests" "${QT_NODES_DEVELOPER_DEFAULTS}")
 option(BUILD_EXAMPLES "Build Examples" "${QT_NODES_DEVELOPER_DEFAULTS}")
 option(BUILD_DOCS "Build Documentation" "${QT_NODES_DEVELOPER_DEFAULTS}")
-option(BUILD_SHARED_LIBS "Build as shared library" ON)
 option(BUILD_DEBUG_POSTFIX_D "Append d suffix to debug libraries" OFF)
 option(QT_NODES_FORCE_TEST_COLOR "Force colorized unit test output" OFF)
 option(USE_QT6 "Build with Qt6 (Enabled by default)" ON)
