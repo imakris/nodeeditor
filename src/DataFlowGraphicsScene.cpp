@@ -6,6 +6,7 @@
 #include "NodeGraphicsObject.hpp"
 #include "SerializationValidation.hpp"
 #include "UndoCommands.hpp"
+#include "selection_utils.hpp"
 
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGraphicsSceneMoveEvent>
@@ -220,18 +221,11 @@ DataFlowGraphicsScene::DataFlowGraphicsScene(DataFlowGraphModel &graphModel, QOb
 
 std::vector<NodeId> DataFlowGraphicsScene::selectedNodes() const
 {
-    QList<QGraphicsItem *> graphicsItems = selectedItems();
-
     std::vector<NodeId> result;
-    result.reserve(graphicsItems.size());
 
-    for (QGraphicsItem *item : graphicsItems) {
-        auto ngo = qgraphicsitem_cast<NodeGraphicsObject *>(item);
-
-        if (ngo != nullptr) {
-            result.push_back(ngo->nodeId());
-        }
-    }
+    detail::for_each_selected<NodeGraphicsObject>(this, [&](NodeGraphicsObject *ngo) {
+        result.push_back(ngo->nodeId());
+    });
 
     return result;
 }
