@@ -114,6 +114,7 @@ set(HPP_HEADER_FILES
   include/QtNodes/internal/Export.hpp
   include/QtNodes/internal/GraphicsView.hpp
   include/QtNodes/internal/GraphicsViewStyle.hpp
+  include/QtNodes/internal/HashUtils.hpp
   include/QtNodes/internal/locateNode.hpp
   include/QtNodes/internal/NodeData.hpp
   include/QtNodes/internal/NodeDelegateModel.hpp
