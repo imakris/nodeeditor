@@ -25,42 +25,6 @@ bool read_unsigned_number(QJsonValue const &value, quint64 maxValue, quint64 &re
     return true;
 }
 
-bool read_node_id(QJsonValue const &value, NodeId &nodeId)
-{
-    quint64 parsed = 0;
-
-    if (!read_unsigned_number(value, InvalidNodeId - 1ull, parsed)) {
-        return false;
-    }
-
-    nodeId = static_cast<NodeId>(parsed);
-    return true;
-}
-
-bool read_group_id(QJsonValue const &value, GroupId &groupId)
-{
-    quint64 parsed = 0;
-
-    if (!read_unsigned_number(value, InvalidGroupId - 1ull, parsed)) {
-        return false;
-    }
-
-    groupId = static_cast<GroupId>(parsed);
-    return true;
-}
-
-bool read_port_index(QJsonValue const &value, PortIndex &portIndex)
-{
-    quint64 parsed = 0;
-
-    if (!read_unsigned_number(value, InvalidPortIndex - 1ull, parsed)) {
-        return false;
-    }
-
-    portIndex = static_cast<PortIndex>(parsed);
-    return true;
-}
-
 bool read_finite_number(QJsonValue const &value, double &result)
 {
     if (!value.isDouble()) {
