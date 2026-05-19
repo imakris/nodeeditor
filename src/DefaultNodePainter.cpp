@@ -279,15 +279,12 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
 namespace {
 
 template<typename Body>
-void for_each_port(AbstractGraphModel& model,
-                   AbstractNodeGeometry& geometry,
-                   NodeId const nodeId,
-                   Body&& body)
+void for_each_port(AbstractGraphModel& model, NodeId const nodeId, Body&& body)
 {
     for (PortType portType : {PortType::Out, PortType::In}) {
         size_t const n = model.nodeData(nodeId, portCountRole(portType)).toUInt();
         for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
-            body(portType, portIndex, geometry.portPosition(nodeId, portType, portIndex));
+            body(portType, portIndex);
         }
     }
 }
@@ -303,8 +300,9 @@ void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObj
     auto const &connectionStyle = StyleCollection::connectionStyle();
     double const reducedDiameter = nodeStyle.ConnectionPointDiameter * 0.6;
 
-    for_each_port(model, geometry, nodeId,
-                  [&](PortType portType, PortIndex portIndex, QPointF const& p) {
+    for_each_port(model, nodeId, [&](PortType portType, PortIndex portIndex) {
+        QPointF const p = geometry.portPosition(nodeId, portType, portIndex);
+
         auto const& dataType = model.portData(nodeId, portType, portIndex, PortRole::DataType)
                                    .value<NodeDataType>();
 
@@ -353,8 +351,7 @@ void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraph
     auto const &connectionStyle = StyleCollection::connectionStyle();
     double const radius = nodeStyle.ConnectionPointDiameter * 0.4;
 
-    for_each_port(model, geometry, nodeId,
-                  [&](PortType portType, PortIndex portIndex, QPointF const& p) {
+    for_each_port(model, nodeId, [&](PortType portType, PortIndex portIndex) {
         auto const& connected = model.connections(nodeId, portType, portIndex);
         if (connected.empty()) {
             return;
@@ -369,6 +366,7 @@ void DefaultNodePainter::drawFilledConnectionPoints(QPainter *painter, NodeGraph
             color = nodeStyle.FilledConnectionPointColor;
         }
 
+        QPointF const p = geometry.portPosition(nodeId, portType, portIndex);
         painter->setPen(color);
         painter->setBrush(color);
         painter->drawEllipse(p, radius, radius);
@@ -412,34 +410,30 @@ void DefaultNodePainter::drawEntryLabels(QPainter *painter, NodeGraphicsObject &
     NodeId const nodeId = ngo.nodeId();
     AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
 
-    for (PortType portType : {PortType::Out, PortType::In}) {
-        unsigned int n = model.nodeData<unsigned int>(nodeId, portCountRole(portType));
+    for_each_port(model, nodeId, [&](PortType portType, PortIndex portIndex) {
+        auto const &connected = model.connections(nodeId, portType, portIndex);
 
-        for (PortIndex portIndex = 0; portIndex < n; ++portIndex) {
-            auto const &connected = model.connections(nodeId, portType, portIndex);
+        QPointF const p = geometry.portTextPosition(nodeId, portType, portIndex);
 
-            QPointF p = geometry.portTextPosition(nodeId, portType, portIndex);
+        if (connected.empty())
+            painter->setPen(nodeStyle.FontColorFaded);
+        else
+            painter->setPen(nodeStyle.FontColor);
 
-            if (connected.empty())
-                painter->setPen(nodeStyle.FontColorFaded);
-            else
-                painter->setPen(nodeStyle.FontColor);
+        QString s;
 
-            QString s;
+        if (model.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
+            s = model.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
+        } else {
+            auto portData = model.portData(nodeId, portType, portIndex, PortRole::DataType);
 
-            if (model.portData<bool>(nodeId, portType, portIndex, PortRole::CaptionVisible)) {
-                s = model.portData<QString>(nodeId, portType, portIndex, PortRole::Caption);
-            } else {
-                auto portData = model.portData(nodeId, portType, portIndex, PortRole::DataType);
-
-                s = portData.value<NodeDataType>().name;
-            }
-
-            QColor const textColor = connected.empty() ? nodeStyle.FontColorFaded
-                                                       : nodeStyle.FontColor;
-            draw_text(painter, view, p, s, textColor, painter->font());
+            s = portData.value<NodeDataType>().name;
         }
-    }
+
+        QColor const textColor = connected.empty() ? nodeStyle.FontColorFaded
+                                                   : nodeStyle.FontColor;
+        draw_text(painter, view, p, s, textColor, painter->font());
+    });
 }
 
 void DefaultNodePainter::drawResizeRect(QPainter *painter, NodeGraphicsObject &ngo) const

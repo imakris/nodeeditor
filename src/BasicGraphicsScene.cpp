@@ -364,29 +364,27 @@ void BasicGraphicsScene::onModelReset()
 
 void BasicGraphicsScene::freezeModelAndConnections(bool isFreeze)
 {
-    for (QGraphicsItem *item : selectedItems()) {
-        if (auto n = qgraphicsitem_cast<NodeGraphicsObject *>(item)) {
-            int portCount = graphModel().nodeData(n->nodeId(), NodeRole::OutPortCount).toInt();
-            for (int i = 0; i < portCount; i++) {
-                auto const &graphConnections = graphModel().connections(n->nodeId(),
-                                                                        QtNodes::PortType::Out,
-                                                                        QtNodes::PortIndex(i));
+    detail::for_each_selected<NodeGraphicsObject>(this, [&](NodeGraphicsObject *n) {
+        int portCount = graphModel().nodeData(n->nodeId(), NodeRole::OutPortCount).toInt();
+        for (int i = 0; i < portCount; i++) {
+            auto const &graphConnections = graphModel().connections(n->nodeId(),
+                                                                    QtNodes::PortType::Out,
+                                                                    QtNodes::PortIndex(i));
 
-                for (auto const &c : graphConnections) {
-                    if (auto *cgo = connectionGraphicsObject(c)) {
-                        cgo->connectionState().setFrozen(isFreeze);
-                        cgo->update();
-                    }
-                }
-            }
-
-            if (auto *dfModel = dynamic_cast<DataFlowGraphModel *>(&graphModel())) {
-                if (auto *delegate = dfModel->delegateModel<NodeDelegateModel>(n->nodeId())) {
-                    delegate->setFrozenState(isFreeze);
+            for (auto const &c : graphConnections) {
+                if (auto *cgo = connectionGraphicsObject(c)) {
+                    cgo->connectionState().setFrozen(isFreeze);
+                    cgo->update();
                 }
             }
         }
-    }
+
+        if (auto *dfModel = dynamic_cast<DataFlowGraphModel *>(&graphModel())) {
+            if (auto *delegate = dfModel->delegateModel<NodeDelegateModel>(n->nodeId())) {
+                delegate->setFrozenState(isFreeze);
+            }
+        }
+    });
 }
 
 std::vector<NodeGraphicsObject *> BasicGraphicsScene::selectedNodes() const

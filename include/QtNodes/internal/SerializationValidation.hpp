@@ -12,11 +12,33 @@ namespace QtNodes::detail {
 
 bool read_unsigned_number(QJsonValue const &value, quint64 maxValue, quint64 &result);
 
-bool read_node_id(QJsonValue const &value, NodeId &nodeId);
+/// Reads an unsigned integer-typed id (NodeId / GroupId / PortIndex) from
+/// `value`, rejecting the `InvalidId` sentinel and anything larger.
+template<typename IdT, IdT InvalidId>
+inline bool read_id(QJsonValue const &value, IdT &result)
+{
+    quint64 parsed = 0;
+    if (!read_unsigned_number(value, static_cast<quint64>(InvalidId) - 1ull, parsed)) {
+        return false;
+    }
+    result = static_cast<IdT>(parsed);
+    return true;
+}
 
-bool read_group_id(QJsonValue const &value, GroupId &groupId);
+inline bool read_node_id(QJsonValue const &value, NodeId &nodeId)
+{
+    return read_id<NodeId, InvalidNodeId>(value, nodeId);
+}
 
-bool read_port_index(QJsonValue const &value, PortIndex &portIndex);
+inline bool read_group_id(QJsonValue const &value, GroupId &groupId)
+{
+    return read_id<GroupId, InvalidGroupId>(value, groupId);
+}
+
+inline bool read_port_index(QJsonValue const &value, PortIndex &portIndex)
+{
+    return read_id<PortIndex, InvalidPortIndex>(value, portIndex);
+}
 
 bool read_finite_number(QJsonValue const &value, double &result);
 
