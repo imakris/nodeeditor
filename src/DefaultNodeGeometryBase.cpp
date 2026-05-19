@@ -5,6 +5,8 @@
 #include "NodeRenderingUtils.hpp"
 #include "NodeData.hpp"
 
+#include <QWidget>
+
 #include <optional>
 
 namespace QtNodes {
@@ -77,6 +79,11 @@ unsigned int DefaultNodeGeometryBase::maxPortsExtent(NodeId const nodeId) const
     unsigned int step = _portSize + _portSpacing;
 
     return step * maxNumOfEntries;
+}
+
+QWidget *DefaultNodeGeometryBase::widgetOf(NodeId const nodeId) const
+{
+    return _graphModel.nodeData<QWidget *>(nodeId, NodeRole::Widget);
 }
 
 unsigned int DefaultNodeGeometryBase::maxPortsTextAdvance(NodeId const nodeId,

@@ -4,6 +4,8 @@
 
 #include <QtGui/QFontMetrics>
 
+class QWidget;
+
 namespace QtNodes {
 
 class AbstractGraphModel;
@@ -39,6 +41,9 @@ protected:
     unsigned int maxPortsExtent(NodeId const nodeId) const;
 
     unsigned int maxPortsTextAdvance(NodeId const nodeId, PortType const portType) const;
+
+    /// Returns the QWidget attached to `nodeId`, or nullptr if none is set.
+    QWidget *widgetOf(NodeId const nodeId) const;
 
 protected:
     mutable unsigned int _portSize;
