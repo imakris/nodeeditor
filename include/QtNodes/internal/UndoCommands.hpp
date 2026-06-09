@@ -5,6 +5,7 @@
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QPointF>
+#include <QtCore/QString>
 #include <QUndoCommand>
 
 #include <unordered_set>
@@ -23,7 +24,9 @@ public:
 
 private:
     BasicGraphicsScene *_scene;
-    NodeId _nodeId;
+    QString _name;
+    QPointF _mouseScenePos;
+    NodeId _nodeId = InvalidNodeId;
     QJsonObject _sceneJson;
 };
 

@@ -354,6 +354,14 @@ void BasicGraphicsScene::onNodeClicked(NodeId const nodeId)
 
 void BasicGraphicsScene::onModelReset()
 {
+    // Drop group state first. Destroying the NodeGroups runs their owned
+    // GroupGraphicsObject destructors (which remove themselves from the scene)
+    // while the scene is still intact, and before the node graphics they hold
+    // by raw pointer are torn down below. Do not iterate child nodes here — they
+    // are about to be destroyed wholesale anyway.
+    _groups.clear();
+    _nextGroupId = 0;
+
     _connectionGraphicsObjects.clear();
     _nodeGraphicsObjects.clear();
 

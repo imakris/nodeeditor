@@ -7,6 +7,7 @@
 #include "ConnectionIdUtils.hpp"
 #include "ConnectionState.hpp"
 #include "ConnectionStyle.hpp"
+#include "GraphicsView.hpp"
 #include "NodeConnectionInteraction.hpp"
 #include "NodeGraphicsObject.hpp"
 #include "StyleCollection.hpp"
@@ -123,9 +124,8 @@ void ConnectionGraphicsObject::rebuildCachedGeometry() const
 
     auto const &connectionStyle = StyleCollection::connectionStyle();
     float const diam = connectionStyle.pointDiameter();
-    QPointF const cornerOffset(diam, diam);
-    commonRect.setTopLeft(commonRect.topLeft() - cornerOffset);
-    commonRect.setBottomRight(commonRect.bottomRight() + 2 * cornerOffset);
+    // Pad uniformly by the endpoint dot extent on all sides.
+    commonRect.adjust(-diam, -diam, diam, diam);
     _cachedBoundingRect = commonRect;
 
     // Stroke path for hit testing
@@ -263,8 +263,9 @@ void ConnectionGraphicsObject::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
     prepareGeometryChange();
 
-    auto view = static_cast<QGraphicsView *>(event->widget());
-    auto ngo = locateNodeAt(event->scenePos(), *nodeScene(), view->transform());
+    GraphicsView *view = GraphicsView::fromWidget(event->widget());
+    QTransform const viewTransform = view ? view->transform() : QTransform();
+    auto ngo = locateNodeAt(event->scenePos(), *nodeScene(), viewTransform);
     if (ngo) {
         ngo->reactToConnection(this);
 
@@ -295,11 +296,9 @@ void ConnectionGraphicsObject::mouseReleaseEvent(QGraphicsSceneMouseEvent *event
     ungrabMouse();
     event->accept();
 
-    auto view = static_cast<QGraphicsView *>(event->widget());
-
-    Q_ASSERT(view);
-
-    auto ngo = locateNodeAt(event->scenePos(), *nodeScene(), view->transform());
+    GraphicsView *view = GraphicsView::fromWidget(event->widget());
+    QTransform const viewTransform = view ? view->transform() : QTransform();
+    auto ngo = locateNodeAt(event->scenePos(), *nodeScene(), viewTransform);
 
     bool wasConnected = false;
 

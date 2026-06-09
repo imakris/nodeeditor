@@ -502,6 +502,9 @@ bool DataFlowGraphModel::deleteConnection(ConnectionId const connectionId)
 
 bool DataFlowGraphModel::deleteNode(NodeId const nodeId)
 {
+    if (!nodeExists(nodeId))
+        return false;
+
     // Delete connections to this node first.
     std::vector<ConnectionId> connectionIds;
     auto const &attachedConnections = allConnectionIds(nodeId);
@@ -622,6 +625,13 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
 
 void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
 {
+    // load() appends into the model and assumes a clean slate; callers must
+    // clear first. Enforce that precondition explicitly rather than relying on
+    // an incidental node-id collision later in the load.
+    if (!_nodeIds.empty()) {
+        throw std::logic_error("DataFlowGraphModel::load requires an empty model; clear it first");
+    }
+
     QJsonArray nodesJsonArray;
     if (!detail::read_required_array(jsonDocument, "nodes", nodesJsonArray)) {
         throw std::logic_error("Serialized graph is missing nodes array");

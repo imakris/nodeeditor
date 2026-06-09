@@ -20,7 +20,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -87,8 +86,10 @@ void configure_text_painter(QPainter *painter, GraphicsView *view)
 // draw position.  The cache key combines QFont::key() (which encodes
 // family, size, weight, style, hinting, etc.) with the text string.
 // For typical node scenes the cache holds ~15 entries and never evicts.
+//
+// All painter caches in this file are reached only from QGraphicsItem::paint,
+// which Qt always invokes on the GUI thread, so they need no synchronization.
 QHash<QString, QPainterPath> s_text_path_cache;
-std::mutex s_text_path_cache_mutex;
 
 struct Color_dpr_key
 {
@@ -111,12 +112,9 @@ struct Color_dpr_key_hash
 };
 
 std::unordered_map<Color_dpr_key, QImage, Color_dpr_key_hash> s_validation_icon_cache;
-std::mutex s_validation_icon_cache_mutex;
 
 QImage validation_icon(QIcon const &icon, QColor const &color, qreal dpr)
 {
-    std::lock_guard<std::mutex> lock(s_validation_icon_cache_mutex);
-
     Color_dpr_key key{color.rgba(), static_cast<int>(dpr * 1000000.0)};
     auto it = s_validation_icon_cache.find(key);
     if (it != s_validation_icon_cache.end()) {
@@ -153,8 +151,6 @@ void draw_text(
         QPainterPath path;
 
         {
-            std::lock_guard<std::mutex> lock(s_text_path_cache_mutex);
-
             auto it = s_text_path_cache.constFind(key);
             if (it == s_text_path_cache.constEnd()) {
                 if (s_text_path_cache.size() >= 500) {

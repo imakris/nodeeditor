@@ -65,6 +65,8 @@ inline ConnectionId makeIncompleteConnectionId(NodeId const connectedNodeId,
 inline ConnectionId makeIncompleteConnectionId(ConnectionId connectionId,
                                                PortType const portToDisconnect)
 {
+    Q_ASSERT(portToDisconnect != PortType::None);
+
     if (portToDisconnect == PortType::Out) {
         connectionId.outNodeId = InvalidNodeId;
         connectionId.outPortIndex = InvalidPortIndex;
@@ -133,6 +135,7 @@ inline ConnectionId fromJson(QJsonObject const &connJson)
 
 inline NodeRole portCountRole(PortType portType) noexcept
 {
+    Q_ASSERT(portType != PortType::None);
     return (portType == PortType::Out) ? NodeRole::OutPortCount : NodeRole::InPortCount;
 }
 

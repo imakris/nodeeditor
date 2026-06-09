@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
 
-cmake_policy(SET CMP0072 NEW) # new in 3.11. The NEW behavior for this policy is to set OpenGL_GL_PREFERENCE to GLVND.
 cmake_policy(SET CMP0068 NEW) # new in 3.9. The NEW behavior of this policy is to ignore the RPATH settings for install_name on macOS.
 
 
@@ -10,7 +9,6 @@ set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES  ON)
-set(OpenGL_GL_PREFERENCE LEGACY)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Enable AUTOMOC globally for all targets (needed for examples with Q_OBJECT)
@@ -54,7 +52,7 @@ else()
   find_package(QT NAMES Qt5 REQUIRED COMPONENTS Widgets)
 endif()
 
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Gui OpenGL)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Gui)
 message(STATUS "QT_VERSION: ${QT_VERSION}, QT_DIR: ${QT_DIR}")
 
 if (${QT_VERSION} VERSION_LESS 5.11.0)
@@ -165,7 +163,6 @@ target_link_libraries(QtNodes
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Gui
-    Qt${QT_VERSION_MAJOR}::OpenGL
 )
 
 target_compile_definitions(QtNodes
@@ -195,7 +192,7 @@ if(NOT "${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
   )
 endif()
 
-target_compile_features(QtNodes PUBLIC cxx_std_14)
+target_compile_features(QtNodes PUBLIC cxx_std_17)
 set_target_properties(QtNodes PROPERTIES CXX_EXTENSIONS OFF)
 
 

@@ -22,7 +22,6 @@
 #include <QtCore/QPointF>
 #include <QtCore/QRectF>
 
-#include <QtOpenGL>
 #include <QtWidgets>
 
 #include <QtCore/QTimerEvent>
@@ -210,18 +209,9 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
         oldScene->update();
     }
 
+    destroySceneActions();
+
     if (!scene) {
-        // Clear actions.
-        delete _clearSelectionAction;
-        delete _deleteSelectionAction;
-        delete _duplicateSelectionAction;
-        delete _copySelectionAction;
-        delete _pasteAction;
-        _clearSelectionAction = nullptr;
-        _deleteSelectionAction = nullptr;
-        _duplicateSelectionAction = nullptr;
-        _copySelectionAction = nullptr;
-        _pasteAction = nullptr;
         return;
     }
 
@@ -229,7 +219,6 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
 
     {
         // setup actions
-        delete _clearSelectionAction;
         _clearSelectionAction = new QAction(QStringLiteral("Clear Selection"), this);
         _clearSelectionAction->setShortcut(Qt::Key_Escape);
 
@@ -239,7 +228,6 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
     }
 
     {
-        delete _deleteSelectionAction;
         _deleteSelectionAction = new QAction(QStringLiteral("Delete Selection"), this);
         _deleteSelectionAction->setShortcutContext(Qt::ShortcutContext::WidgetShortcut);
         _deleteSelectionAction->setShortcut(QKeySequence(QKeySequence::Delete));
@@ -253,10 +241,8 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
     }
 
     {
-        delete _cutSelectionAction;
         _cutSelectionAction = new QAction(QStringLiteral("Cut Selection"), this);
         _cutSelectionAction->setShortcutContext(Qt::ShortcutContext::WidgetShortcut);
-        _cutSelectionAction->setShortcut(QKeySequence(QKeySequence::Cut));
         _cutSelectionAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_X));
         _cutSelectionAction->setAutoRepeat(false);
         connect(_cutSelectionAction, &QAction::triggered, [this] {
@@ -268,7 +254,6 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
     }
 
     {
-        delete _duplicateSelectionAction;
         _duplicateSelectionAction = new QAction(QStringLiteral("Duplicate Selection"), this);
         _duplicateSelectionAction->setShortcutContext(Qt::ShortcutContext::WidgetShortcut);
         _duplicateSelectionAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
@@ -282,7 +267,6 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
     }
 
     {
-        delete _copySelectionAction;
         _copySelectionAction = new QAction(QStringLiteral("Copy Selection"), this);
         _copySelectionAction->setShortcutContext(Qt::ShortcutContext::WidgetShortcut);
         _copySelectionAction->setShortcut(QKeySequence(QKeySequence::Copy));
@@ -296,7 +280,6 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
     }
 
     {
-        delete _pasteAction;
         _pasteAction = new QAction(QStringLiteral("Paste Selection"), this);
         _pasteAction->setShortcutContext(Qt::ShortcutContext::WidgetShortcut);
         _pasteAction->setShortcut(QKeySequence(QKeySequence::Paste));
@@ -306,13 +289,28 @@ void GraphicsView::setScene(BasicGraphicsScene *scene)
         addAction(_pasteAction);
     }
 
-    auto undoAction = scene->undoStack().createUndoAction(this, tr("&Undo"));
-    undoAction->setShortcuts(QKeySequence::Undo);
-    addAction(undoAction);
+    _undoAction = scene->undoStack().createUndoAction(this, tr("&Undo"));
+    _undoAction->setShortcuts(QKeySequence::Undo);
+    addAction(_undoAction);
 
-    auto redoAction = scene->undoStack().createRedoAction(this, tr("&Redo"));
-    redoAction->setShortcuts(QKeySequence::Redo);
-    addAction(redoAction);
+    _redoAction = scene->undoStack().createRedoAction(this, tr("&Redo"));
+    _redoAction->setShortcuts(QKeySequence::Redo);
+    addAction(_redoAction);
+}
+
+void GraphicsView::destroySceneActions()
+{
+    for (QAction **action : {&_clearSelectionAction,
+                             &_deleteSelectionAction,
+                             &_cutSelectionAction,
+                             &_duplicateSelectionAction,
+                             &_copySelectionAction,
+                             &_pasteAction,
+                             &_undoAction,
+                             &_redoAction}) {
+        delete *action;
+        *action = nullptr;
+    }
 }
 
 void GraphicsView::centerScene()
@@ -333,6 +331,10 @@ void GraphicsView::centerScene()
 void GraphicsView::contextMenuEvent(QContextMenuEvent *event)
 {
     QGraphicsView::contextMenuEvent(event);
+
+    if (!nodeScene())
+        return;
+
     QMenu *menu = nullptr;
     const QPointF scenePos = mapToScene(event->pos());
 
@@ -666,11 +668,28 @@ void GraphicsView::scaleDown()
     Q_EMIT scaleChanged(transform().m11());
 }
 
+GraphicsView *GraphicsView::fromWidget(QWidget *widget)
+{
+    while (widget) {
+        if (auto *graphicsView = qobject_cast<GraphicsView *>(widget)) {
+            return graphicsView;
+        }
+        widget = widget->parentWidget();
+    }
+
+    return nullptr;
+}
+
 void GraphicsView::setupScale(double scale)
 {
     stopZoomTimer();
 
-    scale = std::max(_scaleRange.minimum, std::min(_scaleRange.maximum, scale));
+    // A bound of 0 means "unlimited" in that direction, so only clamp against
+    // a bound that is actually set (> 0), matching scaleUp/scaleDown/advanceZoomAnimation.
+    if (_scaleRange.minimum > 0)
+        scale = std::max(_scaleRange.minimum, scale);
+    if (_scaleRange.maximum > 0)
+        scale = std::min(_scaleRange.maximum, scale);
 
     if (scale <= 0)
         return;

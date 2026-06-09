@@ -7,6 +7,8 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
 
+#include <algorithm>
+
 namespace QtNodes {
 
 class Style
@@ -53,10 +55,22 @@ inline bool readColor(QJsonObject const &obj, QString const &key, QColor &color)
     QJsonValue value = obj[key];
     if (value.isArray()) {
         auto colorArray = value.toArray();
-        int rgb[] = {colorArray[0].toInt(), colorArray[1].toInt(), colorArray[2].toInt()};
-        color = QColor(rgb[0], rgb[1], rgb[2]);
+        if (colorArray.size() < 3 || !colorArray[0].isDouble() || !colorArray[1].isDouble()
+            || !colorArray[2].isDouble()) {
+            qWarning() << "Style key" << key << "is not a valid [r, g, b] array; keeping default";
+            return false;
+        }
+        auto clamp8 = [](int v) { return std::clamp(v, 0, 255); };
+        color = QColor(clamp8(colorArray[0].toInt()),
+                       clamp8(colorArray[1].toInt()),
+                       clamp8(colorArray[2].toInt()));
     } else {
-        color = QColor(value.toString());
+        QColor parsed(value.toString());
+        if (!parsed.isValid()) {
+            qWarning() << "Style key" << key << "is not a valid color string; keeping default";
+            return false;
+        }
+        color = parsed;
     }
     return true;
 }

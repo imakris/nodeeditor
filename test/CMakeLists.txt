@@ -44,5 +44,5 @@ add_test(
   NAME test_nodes
   COMMAND
     $<TARGET_FILE:test_nodes>
-    $<$<BOOL:${NE_FORCE_TEST_COLOR}>:--use-colour=yes>
+    $<$<BOOL:${QT_NODES_FORCE_TEST_COLOR}>:--use-colour=yes>
 )

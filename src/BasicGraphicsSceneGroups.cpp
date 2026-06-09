@@ -142,13 +142,29 @@ void BasicGraphicsScene::addNodeToGroup(NodeId nodeId, GroupId groupId)
     if (!_groupingEnabled)
         return;
 
-    auto groupIt = _groups.find(groupId);
     auto nodeIt = _nodeGraphicsObjects.find(nodeId);
-    if (groupIt == _groups.end() || nodeIt == _nodeGraphicsObjects.end())
+    if (nodeIt == _nodeGraphicsObjects.end() || _groups.find(groupId) == _groups.end())
+        return;
+
+    auto *node = nodeIt->second.get();
+
+    // Detach from any current group first so the node is never double-listed.
+    if (auto current = node->nodeGroup().lock()) {
+        // Already in the target group: nothing to do. (Detaching a sole member
+        // would erase the target group from _groups and invalidate it below.)
+        if (current->id() == groupId)
+            return;
+
+        removeNodeFromGroup(nodeId);
+    }
+
+    // Re-find the target group: the detach above can only have removed the node's
+    // previous (different) group, never the target, so this still succeeds.
+    auto groupIt = _groups.find(groupId);
+    if (groupIt == _groups.end())
         return;
 
     auto group = groupIt->second;
-    auto *node = nodeIt->second.get();
     group->addNode(node);
     node->setNodeGroup(group);
 }

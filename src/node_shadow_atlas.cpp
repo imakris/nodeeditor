@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -125,13 +124,12 @@ struct Cache_key_hash
     }
 };
 
+// Reached only from draw_nine_slice_shadow during QGraphicsItem::paint, i.e.
+// the GUI thread, so no synchronization is required.
 std::unordered_map<Cache_key, QImage, Cache_key_hash> s_shadow_cache;
-std::mutex s_shadow_cache_mutex;
 
 QImage cached_shadow_atlas(QColor shadow_color, qreal dpr)
 {
-    std::lock_guard<std::mutex> lock(s_shadow_cache_mutex);
-
     Cache_key key{shadow_color.rgba(), static_cast<int>(dpr * 1000000.0)};
     auto it = s_shadow_cache.find(key);
     if (it != s_shadow_cache.end()) {

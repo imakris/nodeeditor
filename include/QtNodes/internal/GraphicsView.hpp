@@ -72,6 +72,11 @@ public:
 
     static double zoomAnimationVelocityAfter(double velocity, double elapsedTimerSteps);
 
+    /// Resolves the owning GraphicsView from a widget such as a
+    /// QGraphicsSceneMouseEvent::widget() (which is the viewport, not the view).
+    /// Returns nullptr if the widget is not inside a GraphicsView.
+    static GraphicsView *fromWidget(QWidget *widget);
+
 public Q_SLOTS:
     void scaleUp();
 
@@ -126,6 +131,13 @@ private:
     QAction *_duplicateSelectionAction = nullptr;
     QAction *_copySelectionAction = nullptr;
     QAction *_pasteAction = nullptr;
+    QAction *_undoAction = nullptr;
+    QAction *_redoAction = nullptr;
+
+    /// Deletes and nulls every scene-scoped action above. A single teardown used
+    /// by setScene() for both the clear and the rebuild paths, so the create and
+    /// destroy sites can never drift out of sync.
+    void destroySceneActions();
 
     QPointF _clickPos;
     ScaleRange _scaleRange;

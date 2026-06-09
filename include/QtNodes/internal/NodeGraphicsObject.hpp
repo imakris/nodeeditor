@@ -107,7 +107,11 @@ private:
 
     NodeState _nodeState;
 
-    bool _locked;
+    // Effective lock: true when locked by the model flag (NodeFlag::Locked) or by
+    // a group. _groupLocked tracks only the group input; the model input is read
+    // from the model on demand. Both setLockedState() and lock() recompute _locked.
+    bool _locked = false;
+    bool _groupLocked = false;
 
     bool _draggingIntoGroup;
     GroupGraphicsObject *_possibleGroup;

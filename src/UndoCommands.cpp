@@ -122,7 +122,9 @@ static QJsonObject serializeSelectedItems(BasicGraphicsScene *scene)
     return serializedScene;
 }
 
-static void insertSerializedItems(QJsonObject const &json, BasicGraphicsScene *scene)
+static void insertSerializedItems(QJsonObject const &json,
+                                  BasicGraphicsScene *scene,
+                                  std::vector<NodeId> *insertedNodeIds = nullptr)
 {
     AbstractGraphModel &graphModel = scene->graphModel();
 
@@ -134,6 +136,8 @@ static void insertSerializedItems(QJsonObject const &json, BasicGraphicsScene *s
         graphModel.loadNode(obj);
 
         auto id = json_value_to_node_id(obj["id"]);
+        if (insertedNodeIds)
+            insertedNodeIds->push_back(id);
         if (auto *nodeObject = scene->nodeGraphicsObject(id)) {
             nodeObject->setZValue(1.0);
             nodeObject->setSelected(true);
@@ -229,14 +233,12 @@ CreateCommand::CreateCommand(BasicGraphicsScene *scene,
                              QString const name,
                              QPointF const &mouseScenePos)
     : _scene(scene)
+    , _name(name)
+    , _mouseScenePos(mouseScenePos)
     , _sceneJson(QJsonObject())
 {
-    _nodeId = _scene->graphModel().addNode(name);
-    if (_nodeId != InvalidNodeId) {
-        _scene->graphModel().setNodeData(_nodeId, NodeRole::Position, mouseScenePos);
-    } else {
-        setObsolete(true);
-    }
+    // Capture intent only; the first mutation happens in redo(), which the undo
+    // stack invokes on push.
 }
 
 void CreateCommand::undo()
@@ -250,10 +252,18 @@ void CreateCommand::undo()
 
 void CreateCommand::redo()
 {
-    if (_sceneJson.empty() || _sceneJson["nodes"].toArray().empty())
-        return;
-
-    insertSerializedItems(_sceneJson, _scene);
+    if (_sceneJson.empty() || _sceneJson["nodes"].toArray().empty()) {
+        // First execution: create the node fresh.
+        _nodeId = _scene->graphModel().addNode(_name);
+        if (_nodeId == InvalidNodeId) {
+            setObsolete(true);
+            return;
+        }
+        _scene->graphModel().setNodeData(_nodeId, NodeRole::Position, _mouseScenePos);
+    } else {
+        // Re-execution after undo: restore from the serialized snapshot.
+        insertSerializedItems(_sceneJson, _scene);
+    }
 }
 
 //-------------------------------------
@@ -415,16 +425,18 @@ void PasteCommand::redo()
 {
     _scene->clearSelection();
 
-    // Ignore if pasted in content does not generate nodes.
+    // Track exactly which nodes get created so a failed paste can be rolled back
+    // deterministically, independent of the current selection.
+    std::vector<NodeId> insertedNodeIds;
     try {
-        insertSerializedItems(_newSceneJson, _scene);
+        insertSerializedItems(_newSceneJson, _scene, &insertedNodeIds);
     } catch (...) {
-        // If the paste does not work, delete all selected nodes.
-        // `deleteNode(...)` implicitly removes their connections.
+        // Roll back precisely the nodes this paste created; deleteNode(...)
+        // implicitly removes their connections.
         auto &graphModel = _scene->graphModel();
-        detail::for_each_selected<NodeGraphicsObject>(_scene, [&](NodeGraphicsObject *n) {
-            graphModel.deleteNode(n->nodeId());
-        });
+        for (NodeId const id : insertedNodeIds) {
+            graphModel.deleteNode(id);
+        }
 
         setObsolete(true);
     }
@@ -596,7 +608,8 @@ void MoveNodeCommand::redo()
 
 int MoveNodeCommand::id() const
 {
-    return static_cast<int>(typeid(MoveNodeCommand).hash_code());
+    // Stable, build-independent command id used for undo-stack compression.
+    return 0x4d564e44; // 'MVND'
 }
 
 bool MoveNodeCommand::mergeWith(QUndoCommand const *c)

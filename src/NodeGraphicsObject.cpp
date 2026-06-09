@@ -18,22 +18,11 @@
 
 #include <cstdlib>
 #include <optional>
+#include <vector>
 
 namespace QtNodes {
 
 namespace {
-
-GraphicsView *graphics_view_from_widget(QWidget *widget)
-{
-    while (widget) {
-        if (auto *graphicsView = qobject_cast<GraphicsView *>(widget)) {
-            return graphicsView;
-        }
-        widget = widget->parentWidget();
-    }
-
-    return nullptr;
-}
 
 QGraphicsItem::CacheMode initial_cache_mode(BasicGraphicsScene &scene)
 {
@@ -174,11 +163,13 @@ void NodeGraphicsObject::setLockedState()
 {
     NodeFlags flags = _graphModel.nodeFlags(_nodeId);
 
-    bool const locked = flags.testFlag(NodeFlag::Locked);
+    bool const modelLocked = flags.testFlag(NodeFlag::Locked);
 
-    setFlag(QGraphicsItem::ItemIsMovable, !locked);
-    setFlag(QGraphicsItem::ItemIsSelectable, !locked);
-    setFlag(QGraphicsItem::ItemSendsScenePositionChanges, !locked);
+    setFlag(QGraphicsItem::ItemIsMovable, !modelLocked);
+    setFlag(QGraphicsItem::ItemIsSelectable, !modelLocked);
+    setFlag(QGraphicsItem::ItemSendsScenePositionChanges, !modelLocked);
+
+    _locked = modelLocked || _groupLocked;
 }
 
 QRectF NodeGraphicsObject::boundingRect() const
@@ -233,7 +224,7 @@ void NodeGraphicsObject::paint(QPainter *painter, QStyleOptionGraphicsItem const
 {
     painter->setClipRect(option->exposedRect);
 
-    _currentGraphicsView = graphics_view_from_widget(widget);
+    _currentGraphicsView = GraphicsView::fromWidget(widget);
     nodeScene()->nodePainter().paint(painter, *this);
     _currentGraphicsView = nullptr;
 }
@@ -286,7 +277,10 @@ void NodeGraphicsObject::mousePressEvent(QGraphicsSceneMouseEvent *event)
                                            .value<ConnectionPolicy>();
 
                 if (!connected.empty() && outPolicy == ConnectionPolicy::One) {
-                    for (auto &cnId : connected) {
+                    // Snapshot first: deleteConnection mutates (and can destroy) the
+                    // very set `connected` aliases inside the connection index.
+                    std::vector<ConnectionId> toDelete(connected.begin(), connected.end());
+                    for (auto const &cnId : toDelete) {
                         _graphModel.deleteConnection(cnId);
                     }
                 }
@@ -499,7 +493,10 @@ void NodeGraphicsObject::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
 void NodeGraphicsObject::lock(bool locked)
 {
-    _locked = locked;
+    _groupLocked = locked;
+
+    bool const modelLocked = _graphModel.nodeFlags(_nodeId).testFlag(NodeFlag::Locked);
+    _locked = modelLocked || _groupLocked;
 
     setFlag(QGraphicsItem::ItemIsFocusable, !locked);
     setFlag(QGraphicsItem::ItemIsSelectable, !locked);
