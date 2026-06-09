@@ -44,6 +44,19 @@ void send_wheel_event(TestGraphicsView& view, quint64 timestamp)
 }
 } // namespace
 
+TEST_CASE("Zoom-fit slots are safe with no scene", "[zoom]")
+{
+    auto app = applicationSetup();
+
+    // A view with no scene attached must not dereference scene() when the zoom-fit
+    // slots fire (e.g. from a shortcut before any scene is set).
+    GraphicsView view;
+    view.zoomFitAll();
+    view.zoomFitSelected();
+
+    SUCCEED("zoom-fit slots tolerated a null scene");
+}
+
 TEST_CASE("GraphicsView scale range", "[zoom]")
 {
     auto app = applicationSetup();

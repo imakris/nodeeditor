@@ -161,15 +161,20 @@ void NodeGraphicsObject::embedQWidget()
 
 void NodeGraphicsObject::setLockedState()
 {
-    NodeFlags flags = _graphModel.nodeFlags(_nodeId);
+    applyLockState();
+}
 
-    bool const modelLocked = flags.testFlag(NodeFlag::Locked);
+void NodeGraphicsObject::applyLockState()
+{
+    bool const modelLocked = _graphModel.nodeFlags(_nodeId).testFlag(NodeFlag::Locked);
+    bool const effectiveLocked = modelLocked || _groupLocked;
 
-    setFlag(QGraphicsItem::ItemIsMovable, !modelLocked);
-    setFlag(QGraphicsItem::ItemIsSelectable, !modelLocked);
-    setFlag(QGraphicsItem::ItemSendsScenePositionChanges, !modelLocked);
+    _locked = effectiveLocked;
 
-    _locked = modelLocked || _groupLocked;
+    setFlag(QGraphicsItem::ItemIsMovable, !effectiveLocked);
+    setFlag(QGraphicsItem::ItemIsSelectable, !effectiveLocked);
+    setFlag(QGraphicsItem::ItemIsFocusable, !effectiveLocked);
+    setFlag(QGraphicsItem::ItemSendsScenePositionChanges, !effectiveLocked);
 }
 
 QRectF NodeGraphicsObject::boundingRect() const
@@ -494,12 +499,7 @@ void NodeGraphicsObject::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 void NodeGraphicsObject::lock(bool locked)
 {
     _groupLocked = locked;
-
-    bool const modelLocked = _graphModel.nodeFlags(_nodeId).testFlag(NodeFlag::Locked);
-    _locked = modelLocked || _groupLocked;
-
-    setFlag(QGraphicsItem::ItemIsFocusable, !locked);
-    setFlag(QGraphicsItem::ItemIsSelectable, !locked);
+    applyLockState();
 }
 
 QJsonObject NodeGraphicsObject::save() const

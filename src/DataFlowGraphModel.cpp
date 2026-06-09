@@ -52,6 +52,7 @@ NodeId DataFlowGraphModel::addNode(QString const nodeType)
 
         _nodeIds.insert(newId);
         _models[newId] = std::move(model);
+        _loopReachabilityCache.clear();
 
         Q_EMIT nodeCreated(newId);
 
@@ -540,6 +541,7 @@ bool DataFlowGraphModel::deleteNode(NodeId const nodeId)
     _nodeIds.erase(nodeId);
     _nodeGeometryData.erase(nodeId);
     _models.erase(nodeId);
+    _loopReachabilityCache.clear();
 
     Q_EMIT nodeDeleted(nodeId);
 
@@ -626,6 +628,7 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
 
         _nodeIds.insert(restoredNodeId);
         _models[restoredNodeId] = std::move(model);
+        _loopReachabilityCache.clear();
 
         Q_EMIT nodeCreated(restoredNodeId);
 
@@ -689,6 +692,11 @@ void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
     std::vector<ConnectionId> loadedConnections;
     loadedConnections.reserve(parsedConnections.size());
 
+    // Snapshot the monotonic id counter so a failed load is fully transactional:
+    // loadNode() advances _nextNodeId past restored ids, so rolling back the nodes
+    // must also roll back the counter.
+    NodeId const savedNextNodeId = _nextNodeId;
+
     try {
         for (QJsonValueRef nodeJson : nodesJsonArray) {
             QJsonObject const nodeObj = nodeJson.toObject();
@@ -716,6 +724,8 @@ void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
                 deleteNode(*it);
             }
         }
+
+        _nextNodeId = savedNextNodeId;
 
         throw;
     }

@@ -100,6 +100,11 @@ private:
     void embedQWidget();
     void setLockedState();
 
+    /// Recomputes the effective lock (model flag OR group lock) and applies it to
+    /// _locked and the relevant QGraphicsItem flags. Single source of truth so the
+    /// model-lock and group-lock inputs can never leave the item flags inconsistent.
+    void applyLockState();
+
 private:
     NodeId _nodeId;
 

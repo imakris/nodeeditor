@@ -95,6 +95,35 @@ TEST_CASE("DataFlowGraphModel serialization", "[serialization]")
         }
     }
 
+    SECTION("A failed load rolls back the graph and the node-id counter")
+    {
+        static_cast<void>(model.addNode("SerializableTestModel"));
+        static_cast<void>(model.addNode("SerializableTestModel"));
+        QJsonObject good = model.save();
+        REQUIRE(good["nodes"].toArray().size() == 2);
+
+        // Corrupt the second node so loadNode() throws after the first node is
+        // created (which has already advanced the id counter).
+        QJsonObject bad = good;
+        QJsonArray nodes = bad["nodes"].toArray();
+        QJsonObject secondNode = nodes[1].toObject();
+        secondNode.remove("internal-data");
+        nodes.replace(1, secondNode);
+        bad["nodes"] = nodes;
+
+        // Reference: the first id a pristine model hands out.
+        DataFlowGraphModel control(registry);
+        NodeId const controlFirstId = control.addNode("SerializableTestModel");
+
+        DataFlowGraphModel target(registry);
+        CHECK_THROWS(target.load(bad));
+
+        // Graph contents rolled back...
+        CHECK(target.allNodeIds().empty());
+        // ...and the monotonic id counter did not drift past the failed load.
+        CHECK(target.addNode("SerializableTestModel") == controlFirstId);
+    }
+
     SECTION("Save and load model with connections")
     {
         // Create nodes and connection

@@ -159,10 +159,9 @@ private:
 
     // Memoizes connectionPossible()'s loop-detection DFS, keyed by (outNodeId,
     // inNodeId) packed into 64 bits. The result depends only on that node pair and
-    // the connection topology, so during a drag (many per-port, per-repaint calls
-    // with no mutation) it is computed once. Cleared on every topology change
-    // (add/deleteConnection are the only sites that touch _connectionIndex), so it
-    // can never go stale.
+    // the graph topology, so during a drag (many per-port, per-repaint calls with no
+    // mutation) it is computed once. Cleared on every structural mutation — node and
+    // connection add/delete plus loadNode — so it can never go stale.
     mutable std::unordered_map<std::uint64_t, bool> _loopReachabilityCache;
 };
 

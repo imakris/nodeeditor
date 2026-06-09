@@ -883,6 +883,9 @@ QPointF GraphicsView::scenePastePosition()
 
 void GraphicsView::zoomFitAll()
 {
+    if (!scene())
+        return;
+
     stopZoomTimer();
 
     fitInView(scene()->itemsBoundingRect(), Qt::KeepAspectRatio);
@@ -890,6 +893,9 @@ void GraphicsView::zoomFitAll()
 
 void GraphicsView::zoomFitSelected()
 {
+    if (!scene())
+        return;
+
     stopZoomTimer();
 
     if (scene()->selectedItems().count() > 0) {

@@ -53,9 +53,17 @@ inline ConnectionId makeIncompleteConnectionId(NodeId const connectedNodeId,
                                                PortType const connectedPort,
                                                PortIndex const connectedPortIndex)
 {
-    return (connectedPort == PortType::In)
-               ? ConnectionId{InvalidNodeId, InvalidPortIndex, connectedNodeId, connectedPortIndex}
-               : ConnectionId{connectedNodeId, connectedPortIndex, InvalidNodeId, InvalidPortIndex};
+    switch (connectedPort) {
+    case PortType::In:
+        return ConnectionId{InvalidNodeId, InvalidPortIndex, connectedNodeId, connectedPortIndex};
+    case PortType::Out:
+        return ConnectionId{connectedNodeId, connectedPortIndex, InvalidNodeId, InvalidPortIndex};
+    case PortType::None:
+        Q_ASSERT(false);
+        break;
+    }
+
+    return ConnectionId{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
 }
 
 /**
@@ -65,14 +73,18 @@ inline ConnectionId makeIncompleteConnectionId(NodeId const connectedNodeId,
 inline ConnectionId makeIncompleteConnectionId(ConnectionId connectionId,
                                                PortType const portToDisconnect)
 {
-    Q_ASSERT(portToDisconnect != PortType::None);
-
-    if (portToDisconnect == PortType::Out) {
+    switch (portToDisconnect) {
+    case PortType::Out:
         connectionId.outNodeId = InvalidNodeId;
         connectionId.outPortIndex = InvalidPortIndex;
-    } else {
+        break;
+    case PortType::In:
         connectionId.inNodeId = InvalidNodeId;
         connectionId.inPortIndex = InvalidPortIndex;
+        break;
+    case PortType::None:
+        Q_ASSERT(false);
+        break;
     }
 
     return connectionId;
@@ -135,8 +147,17 @@ inline ConnectionId fromJson(QJsonObject const &connJson)
 
 inline NodeRole portCountRole(PortType portType) noexcept
 {
-    Q_ASSERT(portType != PortType::None);
-    return (portType == PortType::Out) ? NodeRole::OutPortCount : NodeRole::InPortCount;
+    switch (portType) {
+    case PortType::Out:
+        return NodeRole::OutPortCount;
+    case PortType::In:
+        return NodeRole::InPortCount;
+    case PortType::None:
+        Q_ASSERT(false);
+        break;
+    }
+
+    return NodeRole::InPortCount;
 }
 
 } // namespace QtNodes
