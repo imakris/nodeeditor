@@ -11,6 +11,7 @@
 
 #include <QJsonObject>
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <unordered_map>
@@ -155,6 +156,14 @@ private:
     ConnectionIdIndex _connectionIndex;
 
     mutable std::unordered_map<NodeId, NodeGeometryData> _nodeGeometryData;
+
+    // Memoizes connectionPossible()'s loop-detection DFS, keyed by (outNodeId,
+    // inNodeId) packed into 64 bits. The result depends only on that node pair and
+    // the connection topology, so during a drag (many per-port, per-repaint calls
+    // with no mutation) it is computed once. Cleared on every topology change
+    // (add/deleteConnection are the only sites that touch _connectionIndex), so it
+    // can never go stale.
+    mutable std::unordered_map<std::uint64_t, bool> _loopReachabilityCache;
 };
 
 } // namespace QtNodes

@@ -139,7 +139,24 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
         return false;
     };
 
-    return basicChecks && (loopsEnabled() || !hasLoops());
+    // The DFS depends only on the (out, in) node pair and the current topology, so
+    // memoize it: during a connection drag the painter asks connectionPossible() for
+    // every in-port of the hovered node on every repaint, all with the same node pair.
+    auto hasLoopsCached = [&]() -> bool {
+        std::uint64_t const key = (static_cast<std::uint64_t>(connectionId.outNodeId) << 32)
+                                  | static_cast<std::uint64_t>(connectionId.inNodeId);
+
+        auto it = _loopReachabilityCache.find(key);
+        if (it != _loopReachabilityCache.end()) {
+            return it->second;
+        }
+
+        bool const result = hasLoops();
+        _loopReachabilityCache.emplace(key, result);
+        return result;
+    };
+
+    return basicChecks && (loopsEnabled() || !hasLoopsCached());
 }
 
 void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
@@ -149,6 +166,7 @@ void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
     }
 
     _connectionIndex.add(connectionId);
+    _loopReachabilityCache.clear();
 
     sendConnectionCreation(connectionId);
 
@@ -491,6 +509,8 @@ bool DataFlowGraphModel::deleteConnection(ConnectionId const connectionId)
     bool const disconnected = _connectionIndex.remove(connectionId);
 
     if (disconnected) {
+        _loopReachabilityCache.clear();
+
         sendConnectionDeletion(connectionId);
 
         propagateEmptyDataTo(connectionNodeId(PortType::In, connectionId),

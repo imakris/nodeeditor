@@ -124,6 +124,27 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
         ConnectionId conn3{node3, 0, node1, 0};
         CHECK_FALSE(model.connectionPossible(conn3));
     }
+
+    SECTION("Loop-detection cache stays correct across topology changes")
+    {
+        NodeId node1 = model.addNode("TestDisplayNode");
+        NodeId node2 = model.addNode("TestDisplayNode");
+
+        ConnectionId aToB{node1, 0, node2, 0};
+        ConnectionId bToA{node2, 0, node1, 0};
+
+        // Probe both directions first so the loop DFS is memoized for each node pair.
+        CHECK(model.connectionPossible(aToB));
+        CHECK(model.connectionPossible(bToA));
+
+        // Realizing A->B must invalidate the memoized result for B->A...
+        model.addConnection(aToB);
+        CHECK_FALSE(model.connectionPossible(bToA)); // would close a cycle
+
+        // ...and removing it must make B->A possible again.
+        model.deleteConnection(aToB);
+        CHECK(model.connectionPossible(bToA));
+    }
 }
 
 TEST_CASE("Loop-enabled model allows cycles", "[loops]")
