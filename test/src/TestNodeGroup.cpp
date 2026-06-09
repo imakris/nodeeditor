@@ -211,6 +211,53 @@ TEST_CASE("Adding and removing nodes from a group", "[node-group]")
         CHECK(nodeGroup->id() == group->id());
     }
 
+    SECTION("Reassigning a node to another group detaches it from the previous one")
+    {
+        NodeId nodeAId = createNode(model, scene);
+        NodeId moverId = createNode(model, scene);
+        NodeId nodeBId = createNode(model, scene);
+
+        std::vector<NodeGraphicsObject *> aNodes{scene.nodeGraphicsObject(nodeAId),
+                                                 scene.nodeGraphicsObject(moverId)};
+        std::vector<NodeGraphicsObject *> bNodes{scene.nodeGraphicsObject(nodeBId)};
+
+        auto groupA = scene.createGroup(aNodes, QStringLiteral("A")).lock();
+        auto groupB = scene.createGroup(bNodes, QStringLiteral("B")).lock();
+        REQUIRE(groupA);
+        REQUIRE(groupB);
+        REQUIRE(groupA->nodeIDs().size() == 2);
+
+        scene.addNodeToGroup(moverId, groupB->id());
+
+        auto moverGroup = scene.nodeGraphicsObject(moverId)->nodeGroup().lock();
+        REQUIRE(moverGroup);
+        CHECK(moverGroup->id() == groupB->id());
+
+        auto const aIds = groupA->nodeIDs();
+        CHECK(aIds.size() == 1);
+        CHECK(std::find(aIds.begin(), aIds.end(), moverId) == aIds.end());
+
+        auto const bIds = groupB->nodeIDs();
+        CHECK(bIds.size() == 2);
+        CHECK(std::find(bIds.begin(), bIds.end(), moverId) != bIds.end());
+    }
+
+    SECTION("Re-adding a node to its current group leaves the group intact")
+    {
+        NodeId nodeId = createNode(model, scene);
+        std::vector<NodeGraphicsObject *> nodes{scene.nodeGraphicsObject(nodeId)};
+        auto group = scene.createGroup(nodes, QStringLiteral("Solo")).lock();
+        REQUIRE(group);
+        GroupId const groupId = group->id();
+
+        // Must not erase the sole-member target group from the scene.
+        scene.addNodeToGroup(nodeId, groupId);
+
+        CHECK(scene.groups().count(groupId) == 1);
+        REQUIRE(group->nodeIDs().size() == 1);
+        CHECK(group->nodeIDs().front() == nodeId);
+    }
+
     SECTION("Group bounds follow added removed and moved nodes")
     {
         NodeId firstNodeId = createNode(model, scene);
@@ -425,5 +472,42 @@ TEST_CASE("Saving and restoring node groups", "[node-group]")
         std::set<NodeId> restoredSet(restoredIds.begin(), restoredIds.end());
         CHECK(restoredSet.count(connectionIt->outNodeId) == 1);
         CHECK(restoredSet.count(connectionIt->inNodeId) == 1);
+    }
+}
+
+TEST_CASE("Resetting the scene clears stale group state", "[node-group]")
+{
+    auto app = applicationSetup();
+
+    auto registry = createDummyRegistry();
+    DataFlowGraphModel model(registry);
+    BasicGraphicsScene scene(model);
+    scene.setGroupingEnabled(true);
+
+    NodeId nodeId = createNode(model, scene);
+    std::vector<NodeGraphicsObject *> nodes{scene.nodeGraphicsObject(nodeId)};
+    // Keep only a weak handle: the scene's `_groups` owns the group, matching the
+    // real ownership contract (createGroup hands back a weak_ptr).
+    auto groupWeak = scene.createGroup(nodes, QStringLiteral("Doomed"));
+    REQUIRE_FALSE(groupWeak.expired());
+    REQUIRE(scene.groups().size() == 1);
+
+    SECTION("onModelReset drops groups whose graphics it destroys")
+    {
+        // Before the fix, _groups survived the clear() inside onModelReset(),
+        // leaving NodeGroups with dangling child pointers and a deleted
+        // GroupGraphicsObject. The reset must drop them outright.
+        scene.onModelReset();
+        CHECK(scene.groups().empty());
+        CHECK(groupWeak.expired());
+    }
+
+    SECTION("Changing orientation drops stale groups")
+    {
+        Qt::Orientation const other = (scene.orientation() == Qt::Horizontal) ? Qt::Vertical
+                                                                              : Qt::Horizontal;
+        scene.setOrientation(other);
+        CHECK(scene.groups().empty());
+        CHECK(groupWeak.expired());
     }
 }

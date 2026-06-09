@@ -1,11 +1,14 @@
 #include "ApplicationSetup.hpp"
 
+#include <QtNodes/AbstractGraphModel>
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/NodeDelegateModel>
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QtNodes/Definitions>
 
 #include <catch2/catch.hpp>
+
+#include <QSignalSpy>
 
 #include <stdexcept>
 
@@ -55,6 +58,24 @@ TEST_CASE("DataFlowGraphModel basic functionality", "[dataflow]")
         CHECK(model.nodeData(nodeId, NodeRole::Caption).toString() == "Test Node");
         CHECK(model.nodeData(nodeId, NodeRole::InPortCount).toUInt() == 2);
         CHECK(model.nodeData(nodeId, NodeRole::OutPortCount).toUInt() == 1);
+    }
+
+    SECTION("deleteNode rejects nonexistent nodes")
+    {
+        QSignalSpy nodeDeletedSpy(&model, &QtNodes::AbstractGraphModel::nodeDeleted);
+
+        NodeId const realId = model.addNode("TestNode");
+        REQUIRE(realId != InvalidNodeId);
+
+        // Unknown id: no mutation, no signal, returns false.
+        CHECK_FALSE(model.deleteNode(9999999));
+        CHECK(nodeDeletedSpy.count() == 0);
+        CHECK(model.nodeExists(realId));
+
+        // Real id: deletes and emits exactly once.
+        CHECK(model.deleteNode(realId));
+        CHECK(nodeDeletedSpy.count() == 1);
+        CHECK_FALSE(model.nodeExists(realId));
     }
 
     SECTION("Invalid node type")

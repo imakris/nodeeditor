@@ -99,6 +99,19 @@ TEST_CASE("GraphicsView scale range", "[zoom]")
         CHECK(view.getScale() <= 4.0);
     }
 
+    SECTION("Zero bound means unlimited (regression: setupScale must not clamp to 0)")
+    {
+        // max=0 / min=0 documents "infinite zoom"; setupScale must honor that and
+        // not clamp the requested scale to 0, which previously killed all zooming.
+        view.setScaleRange(0.0, 0.0);
+
+        view.setupScale(3.0);
+        CHECK(view.getScale() == Approx(3.0).epsilon(0.01));
+
+        view.setupScale(0.05);
+        CHECK(view.getScale() == Approx(0.05).epsilon(0.01));
+    }
+
     SECTION("Smooth wheel zoom keeps the cursor anchor stable")
     {
         view.setupScale(1.0);
