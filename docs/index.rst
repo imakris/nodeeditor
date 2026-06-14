@@ -95,6 +95,7 @@ Other Resources
    migration/v2-to-v3
    faq
    testing
+   upstream-adoption-ledger
    license_link
 
 Indices
