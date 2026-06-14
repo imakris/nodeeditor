@@ -1,8 +1,17 @@
 QtNodes
 #######
 
-.. image:: https://github.com/paceholder/nodeeditor/actions/workflows/cmake_build.yml/badge.svg
-   :target: https://github.com/paceholder/nodeeditor/actions/workflows/cmake_build.yml
+.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml
+   :alt: CI Linux
+
+.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml
+   :alt: CI macOS
+
+.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml
+   :alt: CI Windows
 
 Introduction
 ============
@@ -61,13 +70,19 @@ Supported Environments
 Platforms
 ---------
 
-* Linux (x64, gcc, Qt 5.15.2) |ImageLink|
-* OSX (Apple Clang, Qt 5.15.2) |ImageLink|
-* Windows (MSVC, Qt 5.15.2) |ImageLink|
-* Windows (MSVC, Qt 6.3.0) |ImageLink|
+* Linux (x64, gcc, Qt 5.15.2) |LinuxStatus|
+* OSX (Apple Clang, Qt 6.7.1) |MacOSStatus|
+* Windows (MSVC, Qt 5.15.2) |WindowsStatus|
+* Windows (MSVC, Qt 6.3.0) |WindowsStatus|
 
-.. |ImageLink| image:: https://github.com/paceholder/nodeeditor/actions/workflows/cmake_build.yml/badge.svg
-   :target: https://github.com/paceholder/nodeeditor/actions/workflows/cmake_build.yml
+.. |LinuxStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml
+
+.. |MacOSStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml
+
+.. |WindowsStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml
 
 
 Dependencies

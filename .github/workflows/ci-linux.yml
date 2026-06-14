@@ -1,0 +1,47 @@
+name: CI Linux
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "*"
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Ubuntu / Qt 5.15.2
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "5.15.2"
+
+      - name: Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev xvfb
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_DOCS=OFF
+          -DUSE_QT6=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run tests
+        run: xvfb-run -a ctest --test-dir build --output-on-failure --progress
