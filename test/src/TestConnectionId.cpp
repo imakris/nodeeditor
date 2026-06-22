@@ -3,6 +3,8 @@
 
 #include <catch2/catch.hpp>
 
+#include <limits>
+
 using QtNodes::ConnectionId;
 using QtNodes::NodeId;
 using QtNodes::PortIndex;
@@ -68,12 +70,10 @@ TEST_CASE("ConnectionId edge cases", "[core]")
 
     SECTION("Maximum values")
     {
-        ConnectionId conn{
-            std::numeric_limits<NodeId>::max(),
-            std::numeric_limits<PortIndex>::max(),
-            std::numeric_limits<NodeId>::max() - 1,
-            std::numeric_limits<PortIndex>::max() - 1
-        };
+        ConnectionId conn{std::numeric_limits<NodeId>::max(),
+                          std::numeric_limits<PortIndex>::max(),
+                          std::numeric_limits<NodeId>::max() - 1,
+                          std::numeric_limits<PortIndex>::max() - 1};
 
         CHECK(conn.outNodeId == std::numeric_limits<NodeId>::max());
         CHECK(conn.outPortIndex == std::numeric_limits<PortIndex>::max());

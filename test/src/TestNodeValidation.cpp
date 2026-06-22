@@ -88,19 +88,6 @@ TEST_CASE("NodeDelegateModel validation and status", "[validation]")
 
     REQUIRE(model.nodeExists(nodeId));
 
-    SECTION("Default processing status is NoStatus")
-    {
-        auto status = model.nodeData(nodeId, NodeRole::ProcessingStatus);
-        // Check that we get a valid variant (may be default status)
-        CHECK(status.isValid());
-    }
-
-    SECTION("Default validation state is Valid")
-    {
-        auto state = model.nodeData(nodeId, NodeRole::ValidationState);
-        CHECK(state.isValid());
-    }
-
     SECTION("Model exposes delegate for status modification")
     {
         auto *delegate = model.delegateModel<TestValidatedModel>(nodeId);

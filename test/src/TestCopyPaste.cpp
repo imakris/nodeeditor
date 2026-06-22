@@ -58,30 +58,24 @@ TEST_CASE("Copy/Paste basic functionality", "[copypaste]")
 
     SECTION("Copy and paste creates new node")
     {
-        // Create a node
         NodeId nodeId = model->addNode("TestNode");
         model->setNodeData(nodeId, NodeRole::Position, QPointF(100, 100));
 
         QCoreApplication::processEvents();
 
-        // Select the node
         auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
         REQUIRE(nodeGraphics != nullptr);
         nodeGraphics->setSelected(true);
 
         size_t initialNodeCount = model->allNodeIds().size();
-        CHECK(initialNodeCount == 1);
 
-        // Copy
         view.onCopySelectedObjects();
         QCoreApplication::processEvents();
 
-        // Paste
         view.onPasteObjects();
         QCoreApplication::processEvents();
 
-        // Should have a new node
-        CHECK(model->allNodeIds().size() >= initialNodeCount);
+        CHECK(model->allNodeIds().size() > initialNodeCount);
     }
 
     SECTION("Duplicate creates new node")

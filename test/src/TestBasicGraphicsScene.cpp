@@ -139,21 +139,6 @@ TEST_CASE("BasicGraphicsScene undo/redo support", "[graphics]")
         auto &undoStack = scene.undoStack();
         CHECK(undoStack.count() == 0);
     }
-
-    SECTION("Operations are tracked in undo stack")
-    {
-        auto &undoStack = scene.undoStack();
-        
-        NodeId nodeId = model.addNode("TestNode");
-        QCoreApplication::processEvents();
-        
-        CHECK(model.nodeExists(nodeId));
-        
-        // Note: Depending on the implementation, the undo stack might or might not
-        // automatically track model changes. This test verifies the stack exists
-        // and can be used for undo operations.
-        CHECK(undoStack.count() >= 0);
-    }
 }
 
 TEST_CASE("Node shadow bounds follow visual margins", "[graphics]")

@@ -78,17 +78,6 @@ TEST_CASE("Custom painters registration", "[painters]")
     TestGraphModel model;
     BasicGraphicsScene scene(model);
 
-    SECTION("Scene has default painters initially")
-    {
-        // Scene should have valid painters
-        AbstractNodePainter &nodePainter = scene.nodePainter();
-        AbstractConnectionPainter &connPainter = scene.connectionPainter();
-
-        // Basic check that painters exist (won't crash)
-        CHECK(&nodePainter != nullptr);
-        CHECK(&connPainter != nullptr);
-    }
-
     SECTION("Custom node painter can be registered")
     {
         auto customPainter = std::make_unique<TestNodePainter>();
