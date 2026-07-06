@@ -123,8 +123,8 @@ void ConnectionGraphicsObject::rebuildCachedGeometry() const
     QRectF commonRect = basicRect.united(c1c2Rect);
 
     auto const &connectionStyle = StyleCollection::connectionStyle();
-    float const diam = connectionStyle.pointDiameter();
-    // Pad uniformly by the endpoint dot extent on all sides.
+    float const diam = qMax(connectionStyle.pointDiameter(), 12.0f);
+    // Pad uniformly by endpoint dots and the default arrowhead.
     commonRect.adjust(-diam, -diam, diam, diam);
     _cachedBoundingRect = commonRect;
 

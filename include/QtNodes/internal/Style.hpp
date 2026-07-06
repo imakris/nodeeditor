@@ -56,14 +56,17 @@ inline bool readColor(QJsonObject const &obj, QString const &key, QColor &color)
     if (value.isArray()) {
         auto colorArray = value.toArray();
         if (colorArray.size() < 3 || !colorArray[0].isDouble() || !colorArray[1].isDouble()
-            || !colorArray[2].isDouble()) {
-            qWarning() << "Style key" << key << "is not a valid [r, g, b] array; keeping default";
+            || !colorArray[2].isDouble()
+            || (colorArray.size() > 3 && !colorArray[3].isDouble())) {
+            qWarning() << "Style key" << key
+                       << "is not a valid [r, g, b] or [r, g, b, a] array; keeping default";
             return false;
         }
         auto clamp8 = [](int v) { return std::clamp(v, 0, 255); };
         color = QColor(clamp8(colorArray[0].toInt()),
-                       clamp8(colorArray[1].toInt()),
-                       clamp8(colorArray[2].toInt()));
+                        clamp8(colorArray[1].toInt()),
+                        clamp8(colorArray[2].toInt()),
+                        colorArray.size() > 3 ? clamp8(colorArray[3].toInt()) : 255);
     } else {
         QColor parsed(value.toString());
         if (!parsed.isValid()) {
@@ -77,7 +80,7 @@ inline bool readColor(QJsonObject const &obj, QString const &key, QColor &color)
 
 inline void writeColor(QJsonObject &obj, QString const &key, QColor const &color)
 {
-    obj[key] = color.name();
+    obj[key] = color.name(color.alpha() < 255 ? QColor::HexArgb : QColor::HexRgb);
 }
 
 inline bool readFloat(QJsonObject const &obj, QString const &key, double &val)

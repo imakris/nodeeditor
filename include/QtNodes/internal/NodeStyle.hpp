@@ -55,6 +55,7 @@ public:
 public:
     QColor NormalBoundaryColor;
     QColor SelectedBoundaryColor;
+    QColor AccentColor;
     QColor GradientColor0;
     QColor GradientColor1;
     QColor GradientColor2;
@@ -78,6 +79,8 @@ public:
     float Opacity{0.0f};
 
     // Status icons - initialized in constructor after Q_INIT_RESOURCE
+    QIcon titleIcon;
+
     QIcon statusUpdated;
     QIcon statusProcessing;
     QIcon statusPending;

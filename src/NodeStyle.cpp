@@ -55,6 +55,7 @@ void NodeStyle::loadJson(QJsonObject const &json)
 
     readColor(obj, "NormalBoundaryColor", NormalBoundaryColor);
     readColor(obj, "SelectedBoundaryColor", SelectedBoundaryColor);
+    readColor(obj, "AccentColor", AccentColor);
     readColor(obj, "GradientColor0", GradientColor0);
     readColor(obj, "GradientColor1", GradientColor1);
     readColor(obj, "GradientColor2", GradientColor2);
@@ -81,6 +82,9 @@ QJsonObject NodeStyle::toJson() const
 
     writeColor(obj, "NormalBoundaryColor", NormalBoundaryColor);
     writeColor(obj, "SelectedBoundaryColor", SelectedBoundaryColor);
+    if (AccentColor.isValid() && AccentColor.alpha() > 0) {
+        writeColor(obj, "AccentColor", AccentColor);
+    }
     writeColor(obj, "GradientColor0", GradientColor0);
     writeColor(obj, "GradientColor1", GradientColor1);
     writeColor(obj, "GradientColor2", GradientColor2);

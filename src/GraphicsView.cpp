@@ -799,6 +799,17 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
 {
     QGraphicsView::drawBackground(painter, r);
 
+    auto const &flowViewStyle = StyleCollection::flowViewStyle();
+    const bool fine_grid_disabled =
+        flowViewStyle.FineGridColor.alpha() == 0 ||
+        flowViewStyle.FineGridColor == flowViewStyle.BackgroundColor;
+    const bool coarse_grid_disabled =
+        flowViewStyle.CoarseGridColor.alpha() == 0 ||
+        flowViewStyle.CoarseGridColor == flowViewStyle.BackgroundColor;
+    if (fine_grid_disabled && coarse_grid_disabled) {
+        return;
+    }
+
     painter->setRenderHint(QPainter::Antialiasing, true);
 
     qreal x_offset = 0.0;
@@ -843,19 +854,21 @@ void GraphicsView::drawBackground(QPainter *painter, const QRectF &r)
         }
     };
 
-    auto const &flowViewStyle = StyleCollection::flowViewStyle();
+    if (!fine_grid_disabled) {
+        QPen pfine(flowViewStyle.FineGridColor, 1.0);
+        pfine.setCosmetic(crisp_grid);
 
-    QPen pfine(flowViewStyle.FineGridColor, 1.0);
-    pfine.setCosmetic(crisp_grid);
+        painter->setPen(pfine);
+        drawGrid(15);
+    }
 
-    painter->setPen(pfine);
-    drawGrid(15);
+    if (!coarse_grid_disabled) {
+        QPen p(flowViewStyle.CoarseGridColor, 1.0);
+        p.setCosmetic(crisp_grid);
 
-    QPen p(flowViewStyle.CoarseGridColor, 1.0);
-    p.setCosmetic(crisp_grid);
-
-    painter->setPen(p);
-    drawGrid(150);
+        painter->setPen(p);
+        drawGrid(150);
+    }
 }
 
 void GraphicsView::showEvent(QShowEvent *event)

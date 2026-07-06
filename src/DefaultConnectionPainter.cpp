@@ -7,6 +7,8 @@
 #include "NodeData.hpp"
 #include "StyleCollection.hpp"
 
+#include <cmath>
+
 namespace QtNodes {
 
 namespace {
@@ -19,6 +21,39 @@ QPen make_connection_pen(QColor const &color, qreal width, Qt::PenStyle style = 
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     return pen;
+}
+
+void draw_direction_arrow(QPainter *painter, ConnectionGraphicsObject const &cgo)
+{
+    QPointF const end = cgo.in();
+    QPointF direction;
+    double length = 0.0;
+    for (int i = cgo.cachedSamplePointCount() - 2; i >= 0; --i) {
+        direction = end - cgo.cachedSamplePoint(i);
+        length = std::sqrt(QPointF::dotProduct(direction, direction));
+        if (length > 0.0) {
+            break;
+        }
+    }
+    if (length <= 0.0) {
+        return;
+    }
+
+    direction /= length;
+
+    QPointF const normal(-direction.y(), direction.x());
+    double const arrowLength = 10.0;
+    double const arrowHalfWidth = 5.0;
+    double const tipBackoff = StyleCollection::connectionStyle().pointDiameter() / 2.0 + 1.0;
+    QPointF const tip = end - direction * tipBackoff;
+
+    QPainterPath arrow;
+    arrow.moveTo(tip);
+    arrow.lineTo(tip - direction * arrowLength + normal * arrowHalfWidth);
+    arrow.lineTo(tip - direction * arrowLength - normal * arrowHalfWidth);
+    arrow.closeSubpath();
+
+    painter->fillPath(arrow, painter->pen().color());
 }
 
 } // namespace
@@ -178,6 +213,8 @@ void DefaultConnectionPainter::drawNormalLine(QPainter *painter,
 
         painter->drawPath(cubic);
     }
+
+    draw_direction_arrow(painter, cgo);
 }
 
 void DefaultConnectionPainter::paint(QPainter *painter, ConnectionGraphicsObject const &cgo) const

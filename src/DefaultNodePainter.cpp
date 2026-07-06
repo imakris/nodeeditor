@@ -27,6 +27,12 @@ namespace QtNodes {
 
 namespace {
 
+constexpr qreal k_node_accent_width = 5.0;
+constexpr qreal k_node_title_icon_frame_size = 22.0;
+constexpr qreal k_node_title_icon_frame_radius = 3.0;
+constexpr qreal k_node_title_icon_size = 14.0;
+constexpr qreal k_node_title_icon_margin = 10.0;
+
 GraphicsView *graphics_view(NodeGraphicsObject &ngo)
 {
     if (auto *view = ngo.currentGraphicsView()) {
@@ -270,6 +276,21 @@ void DefaultNodePainter::drawNodeRect(QPainter *painter, NodeGraphicsObject &ngo
     }
 
     painter->drawRoundedRect(boundary, radius, radius);
+
+    if (nodeStyle.AccentColor.isValid() && nodeStyle.AccentColor.alpha() > 0) {
+        QPainterPath boundary_path;
+        boundary_path.addRoundedRect(boundary, radius, radius);
+
+        painter->save();
+        painter->setClipPath(boundary_path);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(nodeStyle.AccentColor);
+        painter->drawRect(QRectF(0.0, 0.0, k_node_accent_width, size.height()));
+        painter->restore();
+
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(boundary, radius, radius);
+    }
 }
 
 namespace {
@@ -390,8 +411,42 @@ void DefaultNodePainter::drawNodeCaption(QPainter *painter, NodeGraphicsObject &
     }
 
     QPointF position = geometry.captionPosition(nodeId);
+    QRectF const caption_rect = geometry.captionRect(nodeId);
+    qreal const caption_top = position.y() - caption_rect.height();
+
+    QRectF icon_frame_rect;
+    QRectF icon_rect;
+    if (!nodeStyle.titleIcon.isNull()) {
+        icon_frame_rect = QRectF(
+            k_node_title_icon_margin,
+            caption_top - 1.0,
+            k_node_title_icon_frame_size,
+            k_node_title_icon_frame_size);
+        icon_rect = QRectF(
+            icon_frame_rect.center().x() - k_node_title_icon_size / 2.0,
+            icon_frame_rect.center().y() - k_node_title_icon_size / 2.0,
+            k_node_title_icon_size,
+            k_node_title_icon_size);
+        position.setX(icon_frame_rect.right() + 6.0);
+    }
 
     painter->setRenderHint(QPainter::TextAntialiasing, true);
+    if (!icon_rect.isNull()) {
+        QColor icon_frame_color = nodeStyle.GradientColor0;
+        icon_frame_color.setAlpha(110);
+
+        QColor icon_frame_border = nodeStyle.FontColorFaded;
+        icon_frame_border.setAlpha(130);
+
+        painter->setPen(QPen(icon_frame_border, 1.0));
+        painter->setBrush(icon_frame_color);
+        painter->drawRoundedRect(
+            icon_frame_rect,
+            k_node_title_icon_frame_radius,
+            k_node_title_icon_frame_radius);
+
+        nodeStyle.titleIcon.paint(painter, icon_rect.toRect());
+    }
     draw_text(painter, view, position, name, nodeStyle.FontColor, f);
 
     f.setBold(false);

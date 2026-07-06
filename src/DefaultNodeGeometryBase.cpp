@@ -14,7 +14,7 @@ namespace QtNodes {
 DefaultNodeGeometryBase::DefaultNodeGeometryBase(AbstractGraphModel &graphModel)
     : AbstractNodeGeometry(graphModel)
     , _portSize(20)
-    , _portSpacing(10)
+    , _portSpacing(14)
     , _fontMetrics(QFont())
     , _boldFontMetrics(QFont())
 {

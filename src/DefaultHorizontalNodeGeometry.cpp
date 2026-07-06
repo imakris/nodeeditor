@@ -1,12 +1,21 @@
 #include "DefaultHorizontalNodeGeometry.hpp"
 
 #include "AbstractGraphModel.hpp"
+#include "NodeRenderingUtils.hpp"
 
 #include <QPoint>
 #include <QRect>
 #include <QWidget>
 
+#include <optional>
+
 namespace QtNodes {
+
+namespace {
+
+constexpr unsigned int k_title_icon_width_overhead = 48u;
+
+}
 
 DefaultHorizontalNodeGeometry::DefaultHorizontalNodeGeometry(AbstractGraphModel &graphModel)
     : DefaultNodeGeometryBase(graphModel)
@@ -44,6 +53,13 @@ void DefaultHorizontalNodeGeometry::recomputeSize(NodeId const nodeId) const
     }
 
     width = std::max(width, static_cast<unsigned int>(capRect.width()) + 2 * _portSpacing);
+
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &style = node_rendering::resolved_node_style(_graphModel, nodeId, fallback_style);
+    bool const caption_visible = _graphModel.nodeData<bool>(nodeId, NodeRole::CaptionVisible);
+    if (caption_visible && !style.titleIcon.isNull()) {
+        width = std::max(width, static_cast<unsigned int>(capRect.width()) + k_title_icon_width_overhead);
+    }
 
     _graphModel.setNodeData(nodeId, NodeRole::Size, QSize(width, height));
 }
