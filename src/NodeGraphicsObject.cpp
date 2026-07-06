@@ -174,6 +174,7 @@ void NodeGraphicsObject::applyLockState()
     setFlag(QGraphicsItem::ItemIsMovable, !effectiveLocked);
     setFlag(QGraphicsItem::ItemIsSelectable, !effectiveLocked);
     setFlag(QGraphicsItem::ItemIsFocusable, !effectiveLocked);
+    setFlag(QGraphicsItem::ItemSendsGeometryChanges, !effectiveLocked);
     setFlag(QGraphicsItem::ItemSendsScenePositionChanges, !effectiveLocked);
 }
 
@@ -236,6 +237,16 @@ void NodeGraphicsObject::paint(QPainter *painter, QStyleOptionGraphicsItem const
 
 QVariant NodeGraphicsObject::itemChange(GraphicsItemChange change, const QVariant &value)
 {
+    if (change == ItemPositionChange && scene()
+        && !nodeScene()->isSyncingNodePositionToGraphics()) {
+        QPointF const requestedPosition = value.toPointF();
+        QPointF const adjustedPosition =
+            nodeScene()->adjustedNodePosition(*this, requestedPosition);
+        if (adjustedPosition != requestedPosition) {
+            return adjustedPosition;
+        }
+    }
+
     if (change == ItemScenePositionHasChanged && scene()) {
         moveConnections();
     }

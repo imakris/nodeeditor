@@ -15,8 +15,10 @@
 
 #include <QUndoStack>
 
-#include <QtWidgets/QGraphicsSceneMoveEvent>
+#include <QtCore/QMetaObject>
+#include <QtCore/QScopedValueRollback>
 #include <QtCore/QtGlobal>
+#include <QtWidgets/QGraphicsSceneMoveEvent>
 
 #include <queue>
 
@@ -70,6 +72,8 @@ BasicGraphicsScene::BasicGraphicsScene(AbstractGraphModel &graphModel, QObject *
     connect(&_graphModel, &AbstractGraphModel::modelReset, this, &BasicGraphicsScene::onModelReset);
 
     traverseGraphAndPopulateGraphicsObjects();
+
+    QMetaObject::invokeMethod(this, [this] { syncNodePositions(); }, Qt::QueuedConnection);
 }
 
 BasicGraphicsScene::~BasicGraphicsScene() = default;
@@ -227,14 +231,25 @@ QMenu *BasicGraphicsScene::createSceneMenu(QPointF const scenePos)
     return nullptr;
 }
 
+QPointF BasicGraphicsScene::adjustedNodePosition(NodeGraphicsObject const &node,
+                                                 QPointF const &requestedPosition) const
+{
+    Q_UNUSED(node);
+    return requestedPosition;
+}
+
+bool BasicGraphicsScene::isSyncingNodePositionToGraphics() const noexcept
+{
+    return _syncingNodePositionToGraphics;
+}
+
 void BasicGraphicsScene::traverseGraphAndPopulateGraphicsObjects()
 {
     auto const &allNodeIds = _graphModel.allNodeIds();
 
     // First create all the nodes.
     for (NodeId const nodeId : allNodeIds) {
-        _nodeGraphicsObjects[nodeId] = std::make_unique<NodeGraphicsObject>(*this, nodeId);
-        _nodeGraphicsObjects[nodeId]->updateValidationTooltip();
+        addNodeGraphicsObject(nodeId);
     }
 
     // Then for each node check output connections and insert them.
@@ -250,6 +265,53 @@ void BasicGraphicsScene::traverseGraphAndPopulateGraphicsObjects()
             }
         }
     }
+}
+
+void BasicGraphicsScene::addNodeGraphicsObject(NodeId const nodeId)
+{
+    auto node = std::make_unique<NodeGraphicsObject>(*this, nodeId);
+    auto *nodePtr = node.get();
+    _nodeGraphicsObjects[nodeId] = std::move(node);
+
+    syncNodePosition(*nodePtr);
+    nodePtr->updateValidationTooltip();
+}
+
+void BasicGraphicsScene::syncNodePositions()
+{
+    for (auto &nodeEntry : _nodeGraphicsObjects) {
+        syncNodePosition(*nodeEntry.second);
+    }
+}
+
+void BasicGraphicsScene::syncNodePosition(NodeGraphicsObject &node)
+{
+    QPointF const requestedPosition =
+        _graphModel.nodeData<QPointF>(node.nodeId(), NodeRole::Position);
+    QPointF const adjustedPosition = adjustedNodePosition(node, requestedPosition);
+
+    if (adjustedPosition != requestedPosition) {
+        QScopedValueRollback<NodeId> const correctingNodeId(_correctingNodePositionNodeId,
+                                                            node.nodeId());
+        QScopedValueRollback<QPointF> const correctingPosition(_correctingNodePosition,
+                                                               adjustedPosition);
+        _graphModel.setNodeData(node.nodeId(), NodeRole::Position, adjustedPosition);
+    }
+
+    if (node.pos() != adjustedPosition) {
+        QScopedValueRollback<bool> const syncingPosition(_syncingNodePositionToGraphics, true);
+        node.setPos(adjustedPosition);
+    }
+}
+
+bool BasicGraphicsScene::isCorrectingNodePosition(NodeId const nodeId) const
+{
+    if (_correctingNodePositionNodeId != nodeId) {
+        return false;
+    }
+
+    QPointF const modelPosition = _graphModel.nodeData<QPointF>(nodeId, NodeRole::Position);
+    return modelPosition == _correctingNodePosition;
 }
 
 void BasicGraphicsScene::updateAttachedNodes(ConnectionId const connectionId,
@@ -305,17 +367,20 @@ void BasicGraphicsScene::onNodeDeleted(NodeId const nodeId)
 
 void BasicGraphicsScene::onNodeCreated(NodeId const nodeId)
 {
-    _nodeGraphicsObjects[nodeId] = std::make_unique<NodeGraphicsObject>(*this, nodeId);
-    _nodeGraphicsObjects[nodeId]->updateValidationTooltip();
+    addNodeGraphicsObject(nodeId);
 
     Q_EMIT modified(this);
 }
 
 void BasicGraphicsScene::onNodePositionUpdated(NodeId const nodeId)
 {
+    if (isCorrectingNodePosition(nodeId)) {
+        return;
+    }
+
     auto node = nodeGraphicsObject(nodeId);
     if (node) {
-        node->setPos(_graphModel.nodeData(nodeId, NodeRole::Position).value<QPointF>());
+        syncNodePosition(*node);
         if (auto group = node->nodeGroup().lock()) {
             group->groupGraphicsObject().updateGroupGeometry();
         }

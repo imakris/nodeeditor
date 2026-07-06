@@ -11,8 +11,12 @@
 
 #include <QGraphicsView>
 #include <QJsonObject>
+#include <QSignalSpy>
 #include <QVariantMap>
 #include <QUndoStack>
+
+#include <algorithm>
+#include <vector>
 
 using QtNodes::BasicGraphicsScene;
 using QtNodes::ConnectionId;
@@ -35,6 +39,62 @@ QVariantMap shadow_disabled_style()
     style["NodeStyle"] = nodeStyle;
     return style;
 }
+
+class Constraining_scene : public BasicGraphicsScene
+{
+public:
+    explicit Constraining_scene(TestGraphModel &model)
+    :
+        BasicGraphicsScene(model)
+    {}
+
+    QPointF adjustedNodePosition(NodeGraphicsObject const &node,
+                                 QPointF const &requestedPosition) const override
+    {
+        Q_UNUSED(node);
+        return QPointF(
+            std::min(requestedPosition.x(), m_max_position.x()),
+            std::min(requestedPosition.y(), m_max_position.y()));
+    }
+
+private:
+    QPointF m_max_position{120.0, 90.0};
+};
+
+class Counting_step_scene : public BasicGraphicsScene
+{
+public:
+    explicit Counting_step_scene(TestGraphModel &model)
+    :
+        BasicGraphicsScene(model)
+    {}
+
+    QPointF adjustedNodePosition(NodeGraphicsObject const &node,
+                                 QPointF const &requestedPosition) const override
+    {
+        Q_UNUSED(node);
+        ++m_adjustment_count;
+
+        if (requestedPosition.x() <= m_max_position.x()
+            && requestedPosition.y() <= m_max_position.y()) {
+            return requestedPosition;
+        }
+
+        return QPointF(
+            std::max(requestedPosition.x() - k_step, m_max_position.x()),
+            std::max(requestedPosition.y() - k_step, m_max_position.y()));
+    }
+
+    int adjustmentCount() const { return m_adjustment_count; }
+
+    void resetAdjustmentCount() { m_adjustment_count = 0; }
+
+private:
+    static constexpr double k_step = 10.0;
+
+    mutable int m_adjustment_count = 0;
+    QPointF m_max_position{120.0, 90.0};
+};
 
 } // namespace
 
@@ -126,6 +186,137 @@ TEST_CASE("BasicGraphicsScene functionality", "[graphics]")
 
         CHECK(nodeGraphics->opacity() == Approx(QtNodes::StyleCollection::nodeStyle().Opacity));
     }
+}
+
+TEST_CASE("BasicGraphicsScene adjusts node positions through one scene hook", "[graphics]")
+{
+    auto app = applicationSetup();
+    TestGraphModel model;
+    NodeId const nodeId = model.addNode("TestNode");
+    std::vector<QPointF> positionsObservedBeforeScene;
+
+    QObject::connect(&model,
+                     &TestGraphModel::nodePositionUpdated,
+                     [&](NodeId const updatedNodeId) {
+                         if (updatedNodeId == nodeId) {
+                             positionsObservedBeforeScene.push_back(
+                                 model.nodeData<QPointF>(nodeId, NodeRole::Position));
+                         }
+                     });
+
+    Constraining_scene scene(model);
+    QCoreApplication::processEvents();
+
+    auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+    REQUIRE(nodeGraphics != nullptr);
+
+    SECTION("Direct graphics moves are adjusted before commit")
+    {
+        nodeGraphics->setPos(QPointF(220.0, 140.0));
+
+        CHECK(nodeGraphics->pos().x() == Approx(120.0));
+        CHECK(nodeGraphics->pos().y() == Approx(90.0));
+    }
+
+    SECTION("Model position writes are adjusted and written back")
+    {
+        std::vector<QPointF> positionsObservedAfterScene;
+        QObject::connect(&model,
+                         &TestGraphModel::nodePositionUpdated,
+                         [&](NodeId const updatedNodeId) {
+                             if (updatedNodeId == nodeId) {
+                                 positionsObservedAfterScene.push_back(
+                                     model.nodeData<QPointF>(nodeId, NodeRole::Position));
+                             }
+                         });
+
+        QSignalSpy positionSpy(&model, &TestGraphModel::nodePositionUpdated);
+        REQUIRE(positionSpy.isValid());
+
+        CHECK(positionsObservedBeforeScene.empty());
+
+        model.setNodeData(nodeId, NodeRole::Position, QPointF(220.0, 140.0));
+
+        QPointF const modelPosition =
+            model.nodeData(nodeId, NodeRole::Position).value<QPointF>();
+
+        CHECK(positionSpy.count() == 2);
+        REQUIRE(positionsObservedBeforeScene.size() == 2);
+        CHECK(positionsObservedBeforeScene[0] == QPointF(220.0, 140.0));
+        CHECK(positionsObservedBeforeScene[1] == QPointF(120.0, 90.0));
+        REQUIRE(positionsObservedAfterScene.size() == 2);
+        CHECK(positionsObservedAfterScene[0] == QPointF(120.0, 90.0));
+        CHECK(positionsObservedAfterScene[1] == QPointF(120.0, 90.0));
+        CHECK(modelPosition.x() == Approx(120.0));
+        CHECK(modelPosition.y() == Approx(90.0));
+        CHECK(nodeGraphics->pos().x() == Approx(120.0));
+        CHECK(nodeGraphics->pos().y() == Approx(90.0));
+    }
+}
+
+TEST_CASE("BasicGraphicsScene adjusts pre-positioned model nodes during population", "[graphics]")
+{
+    auto app = applicationSetup();
+    TestGraphModel model;
+
+    NodeId const nodeId = model.addNode("TestNode");
+    model.setNodeData(nodeId, NodeRole::Position, QPointF(220.0, 140.0));
+
+    Constraining_scene scene(model);
+    std::vector<QPointF> positionsObservedAfterScene;
+    QObject::connect(&model,
+                     &TestGraphModel::nodePositionUpdated,
+                     [&](NodeId const updatedNodeId) {
+                         if (updatedNodeId == nodeId) {
+                             positionsObservedAfterScene.push_back(
+                                 model.nodeData<QPointF>(nodeId, NodeRole::Position));
+                         }
+                     });
+
+    QSignalSpy positionSpy(&model, &TestGraphModel::nodePositionUpdated);
+    REQUIRE(positionSpy.isValid());
+
+    QCoreApplication::processEvents();
+
+    auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+    REQUIRE(nodeGraphics != nullptr);
+
+    QPointF const modelPosition =
+        model.nodeData(nodeId, NodeRole::Position).value<QPointF>();
+
+    CHECK(positionSpy.count() == 1);
+    REQUIRE(positionsObservedAfterScene.size() == 1);
+    CHECK(positionsObservedAfterScene[0] == QPointF(120.0, 90.0));
+    CHECK(modelPosition.x() == Approx(120.0));
+    CHECK(modelPosition.y() == Approx(90.0));
+    CHECK(nodeGraphics->pos().x() == Approx(120.0));
+    CHECK(nodeGraphics->pos().y() == Approx(90.0));
+}
+
+TEST_CASE("BasicGraphicsScene applies node position hook once for model-originated moves",
+          "[graphics]")
+{
+    auto app = applicationSetup();
+    TestGraphModel model;
+    Counting_step_scene scene(model);
+
+    NodeId const nodeId = model.addNode("TestNode");
+    QCoreApplication::processEvents();
+
+    auto *nodeGraphics = scene.nodeGraphicsObject(nodeId);
+    REQUIRE(nodeGraphics != nullptr);
+
+    scene.resetAdjustmentCount();
+    model.setNodeData(nodeId, NodeRole::Position, QPointF(150.0, 120.0));
+
+    QPointF const modelPosition =
+        model.nodeData(nodeId, NodeRole::Position).value<QPointF>();
+
+    CHECK(scene.adjustmentCount() == 1);
+    CHECK(modelPosition.x() == Approx(140.0));
+    CHECK(modelPosition.y() == Approx(110.0));
+    CHECK(nodeGraphics->pos().x() == Approx(140.0));
+    CHECK(nodeGraphics->pos().y() == Approx(110.0));
 }
 
 TEST_CASE("BasicGraphicsScene undo/redo support", "[graphics]")

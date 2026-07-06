@@ -196,6 +196,20 @@ public:
     virtual QMenu *createSceneMenu(QPointF const scenePos);
 
     /**
+     * @brief Returns the scene-approved position for a requested node move.
+     *
+     * The default returns `requestedPosition`. Overrides may clamp, snap, or
+     * otherwise transform positions, but must not write node position data. The
+     * scene applies the hook to graphics moves, model writes, and existing model
+     * nodes after construction. Overrides should be stable for positions they
+     * already accept so later sync sweeps do not move corrected nodes again.
+     */
+    virtual QPointF adjustedNodePosition(NodeGraphicsObject const &node,
+                                         QPointF const &requestedPosition) const;
+
+    bool isSyncingNodePositionToGraphics() const noexcept;
+
+    /**
      * @brief Freezes and unfreezes the model and connections of the selected nodes.
      * @param isFreeze reference for freezing or unfreezing the model and connections of the selected nodes.
      */
@@ -238,6 +252,10 @@ private:
      * created by checking non-empty node `Out` ports.
      */
     void traverseGraphAndPopulateGraphicsObjects();
+    void addNodeGraphicsObject(NodeId const nodeId);
+    void syncNodePositions();
+    void syncNodePosition(NodeGraphicsObject &node);
+    bool isCorrectingNodePosition(NodeId const nodeId) const;
 
     /// Redraws adjacent nodes for given `connectionId`
     void updateAttachedNodes(ConnectionId const connectionId, PortType const portType);
@@ -301,6 +319,9 @@ private:
     std::unique_ptr<AbstractNodeGeometry> _nodeGeometry;
     std::unique_ptr<AbstractNodePainter> _nodePainter;
     std::unique_ptr<AbstractConnectionPainter> _connectionPainter;
+    NodeId _correctingNodePositionNodeId{InvalidNodeId};
+    QPointF _correctingNodePosition;
+    bool _syncingNodePositionToGraphics{false};
     bool _nodeDrag;
     QUndoStack *_undoStack;
     Qt::Orientation _orientation;
