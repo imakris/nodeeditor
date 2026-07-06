@@ -7,6 +7,7 @@
 #include "NodeData.hpp"
 #include "StyleCollection.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace QtNodes {
@@ -25,28 +26,30 @@ QPen make_connection_pen(QColor const &color, qreal width, Qt::PenStyle style = 
 
 void draw_direction_arrow(QPainter *painter, ConnectionGraphicsObject const &cgo)
 {
-    QPointF const end = cgo.in();
-    QPointF direction;
-    double length = 0.0;
-    for (int i = cgo.cachedSamplePointCount() - 2; i >= 0; --i) {
-        direction = end - cgo.cachedSamplePoint(i);
-        length = std::sqrt(QPointF::dotProduct(direction, direction));
-        if (length > 0.0) {
-            break;
-        }
-    }
-    if (length <= 0.0) {
+    QPainterPath const &path = cgo.cachedCubicPath();
+    qreal const pathLength = path.length();
+    if (pathLength <= 0.0) {
         return;
     }
 
-    direction /= length;
-
-    QPointF const normal(-direction.y(), direction.x());
     double const arrowLength = 10.0;
     double const arrowHalfWidth = 5.0;
     double const tipBackoff = StyleCollection::connectionStyle().pointDiameter() / 2.0 + 1.0;
-    QPointF const tip = end - direction * tipBackoff;
+    qreal const effectiveBackoff = std::min<qreal>(tipBackoff, pathLength * 0.5);
+    qreal const tipPercent = path.percentAtLength(pathLength - effectiveBackoff);
+    QPointF const tip = path.pointAtPercent(tipPercent);
 
+    qreal const tangentDelta = std::min<qreal>(0.01, 1.0 / pathLength);
+    qreal const beforePercent = std::max<qreal>(0.0, tipPercent - tangentDelta);
+    qreal const afterPercent = std::min<qreal>(1.0, tipPercent + tangentDelta);
+    QPointF direction = path.pointAtPercent(afterPercent) - path.pointAtPercent(beforePercent);
+    double const directionLength = std::sqrt(QPointF::dotProduct(direction, direction));
+    if (directionLength <= 0.0) {
+        return;
+    }
+    direction /= directionLength;
+
+    QPointF const normal(-direction.y(), direction.x());
     QPainterPath arrow;
     arrow.moveTo(tip);
     arrow.lineTo(tip - direction * arrowLength + normal * arrowHalfWidth);
