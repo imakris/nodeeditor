@@ -13,11 +13,13 @@
 #include "NodeGraphicsObject.hpp"
 #include "selection_utils.hpp"
 
+#include <vnm_qt_dispatch/vnm_qt_dispatch.h>
+
 #include <QUndoStack>
 
-#include <QtCore/QMetaObject>
 #include <QtCore/QScopedValueRollback>
 #include <QtCore/QtGlobal>
+#include <QtCore/QtLogging>
 #include <QtWidgets/QGraphicsSceneMoveEvent>
 
 #include <queue>
@@ -73,7 +75,10 @@ BasicGraphicsScene::BasicGraphicsScene(AbstractGraphModel &graphModel, QObject *
 
     traverseGraphAndPopulateGraphicsObjects();
 
-    QMetaObject::invokeMethod(this, [this] { syncNodePositions(); }, Qt::QueuedConnection);
+    const auto result = vnm::qt::post(this, [this] { syncNodePositions(); });
+    if (result != vnm::qt::Post_result::QUEUED) {
+        qWarning("QtNodes: Failed to queue initial node-position synchronization.");
+    }
 }
 
 BasicGraphicsScene::~BasicGraphicsScene() = default;

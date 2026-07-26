@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.21)
 
 cmake_policy(SET CMP0068 NEW) # new in 3.9. The NEW behavior of this policy is to ignore the RPATH settings for install_name on macOS.
 
@@ -31,6 +31,10 @@ option(BUILD_DEBUG_POSTFIX_D "Append d suffix to debug libraries" OFF)
 option(QT_NODES_FORCE_TEST_COLOR "Force colorized unit test output" OFF)
 option(USE_QT6 "Build with Qt6 (Enabled by default)" ON)
 
+if(NOT USE_QT6)
+  message(FATAL_ERROR "QtNodes requires Qt 6 after adopting vnm_qt_dispatch.")
+endif()
+
 if(QT_NODES_DEVELOPER_DEFAULTS)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
@@ -54,6 +58,36 @@ endif()
 
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Gui)
 message(STATUS "QT_VERSION: ${QT_VERSION}, QT_DIR: ${QT_DIR}")
+
+include(FetchContent)
+set(VNM_QT_DISPATCH_SOURCE_DIR "" CACHE PATH
+  "Optional path to a local vnm_qt_dispatch source checkout.")
+if(NOT TARGET vnm_qt_dispatch::vnm_qt_dispatch)
+  if(VNM_QT_DISPATCH_SOURCE_DIR)
+    if(NOT EXISTS "${VNM_QT_DISPATCH_SOURCE_DIR}/CMakeLists.txt")
+      message(FATAL_ERROR
+        "VNM_QT_DISPATCH_SOURCE_DIR does not contain a "
+        "vnm_qt_dispatch CMakeLists.txt:\n"
+        "  ${VNM_QT_DISPATCH_SOURCE_DIR}")
+    endif()
+    FetchContent_Declare(qt_nodes_qt_dispatch
+      SOURCE_DIR "${VNM_QT_DISPATCH_SOURCE_DIR}"
+      BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/vnm_qt_dispatch-build")
+  else()
+    FetchContent_Declare(qt_nodes_qt_dispatch
+      GIT_REPOSITORY
+        "https://github.com/Varinomics/vnm_qt_dispatch.git"
+      GIT_TAG master
+      GIT_SHALLOW FALSE
+      BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/vnm_qt_dispatch-build")
+  endif()
+  FetchContent_MakeAvailable(qt_nodes_qt_dispatch)
+endif()
+
+if(NOT TARGET vnm_qt_dispatch::vnm_qt_dispatch)
+  message(FATAL_ERROR
+    "vnm_qt_dispatch target is unavailable after dependency discovery.")
+endif()
 
 if (${QT_VERSION} VERSION_LESS 5.11.0)
   message(FATAL_ERROR "Requires qt version >= 5.11.0, Your current version is ${QT_VERSION}")
@@ -163,6 +197,8 @@ target_link_libraries(QtNodes
     Qt${QT_VERSION_MAJOR}::Core
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Gui
+  PRIVATE
+    vnm_qt_dispatch::vnm_qt_dispatch
 )
 
 target_compile_definitions(QtNodes
