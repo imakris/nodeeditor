@@ -1,4 +1,4 @@
-#include <QAction> // Compatible with Qt5 and Qt6
+#include <QAction>
 
 #include <QtGui/QScreen>
 #include <QtWidgets/QApplication>
