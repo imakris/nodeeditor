@@ -29,11 +29,6 @@ option(BUILD_EXAMPLES "Build Examples" "${QT_NODES_DEVELOPER_DEFAULTS}")
 option(BUILD_DOCS "Build Documentation" "${QT_NODES_DEVELOPER_DEFAULTS}")
 option(BUILD_DEBUG_POSTFIX_D "Append d suffix to debug libraries" OFF)
 option(QT_NODES_FORCE_TEST_COLOR "Force colorized unit test output" OFF)
-option(USE_QT6 "Build with Qt6 (Enabled by default)" ON)
-
-if(NOT USE_QT6)
-  message(FATAL_ERROR "QtNodes requires Qt 6 after adopting vnm_qt_dispatch.")
-endif()
 
 if(QT_NODES_DEVELOPER_DEFAULTS)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
@@ -50,13 +45,7 @@ endif()
 
 add_subdirectory(external)
 
-if(USE_QT6)
-  find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets)
-else()
-  find_package(QT NAMES Qt5 REQUIRED COMPONENTS Widgets)
-endif()
-
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Gui)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Gui)
 message(STATUS "QT_VERSION: ${QT_VERSION}, QT_DIR: ${QT_DIR}")
 
 include(FetchContent)
@@ -87,10 +76,6 @@ endif()
 if(NOT TARGET vnm_qt_dispatch::vnm_qt_dispatch)
   message(FATAL_ERROR
     "vnm_qt_dispatch target is unavailable after dependency discovery.")
-endif()
-
-if (${QT_VERSION} VERSION_LESS 5.11.0)
-  message(FATAL_ERROR "Requires qt version >= 5.11.0, Your current version is ${QT_VERSION}")
 endif()
 
 set(CPP_SOURCE_FILES
@@ -194,9 +179,9 @@ target_include_directories(QtNodes
 
 target_link_libraries(QtNodes
   PUBLIC
-    Qt${QT_VERSION_MAJOR}::Core
-    Qt${QT_VERSION_MAJOR}::Widgets
-    Qt${QT_VERSION_MAJOR}::Gui
+    Qt6::Core
+    Qt6::Widgets
+    Qt6::Gui
   PRIVATE
     vnm_qt_dispatch::vnm_qt_dispatch
 )
@@ -288,6 +273,12 @@ install(EXPORT QtNodesTargets
 )
 
 include(CMakePackageConfigHelpers)
+
+if(BUILD_SHARED_LIBS)
+  set(QT_NODES_PACKAGE_NEEDS_QT_DISPATCH OFF)
+else()
+  set(QT_NODES_PACKAGE_NEEDS_QT_DISPATCH ON)
+endif()
 
 configure_package_config_file(${CMAKE_CURRENT_LIST_DIR}/cmake/QtNodesConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/QtNodesConfig.cmake

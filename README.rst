@@ -70,10 +70,9 @@ Supported Environments
 Platforms
 ---------
 
-* Linux (x64, gcc, Qt 5.15.2) |LinuxStatus|
+* Linux (x64, gcc, Qt 6.5+) |LinuxStatus|
 * OSX (Apple Clang, Qt 6.7.1) |MacOSStatus|
-* Windows (MSVC, Qt 5.15.2) |WindowsStatus|
-* Windows (MSVC, Qt 6.3.0) |WindowsStatus|
+* Windows (MSVC, Qt 6.5+) |WindowsStatus|
 
 .. |LinuxStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml/badge.svg?branch=master
    :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml
@@ -88,8 +87,8 @@ Platforms
 Dependencies
 ------------
 
-* Qt >5.15
-* CMake 3.11
+* Qt 6.5 or newer
+* CMake 3.21 or newer
 * Catch2
 
 
@@ -119,15 +118,8 @@ Current State (v3)
 Building
 ========
 
-Set this option to false if you want to build with Qt5 version instead of Qt6:
-
-::
-
-   USE_QT6
-
-   mkdir build && cd build && cmake .. -DUSE_QT6=on
-   or
-   mkdir build && cd build && cmake .. -DUSE_QT6=off
+QtNodes requires Qt 6.5 or newer. Configure with the desired Qt 6 installation
+available through ``Qt6_DIR`` or ``CMAKE_PREFIX_PATH``.
 
 For building a static lib use:
 

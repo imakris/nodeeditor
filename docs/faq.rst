@@ -27,9 +27,9 @@ without any scene or view. This is called "headless mode."
    model.addConnection({n1, 0, n2, 0});
    // Data flows, no GUI needed
 
-**Does QtNodes support Qt5 and Qt6?**
+**Which Qt version does QtNodes support?**
 
-Yes. Set ``-DUSE_QT6=OFF`` for Qt5, or ``-DUSE_QT6=ON`` (default) for Qt6.
+QtNodes requires Qt 6.5 or newer.
 
 Common Issues
 -------------
@@ -129,11 +129,12 @@ Either install Catch2 or disable testing:
 
 **Qt version conflicts**
 
-Make sure all components use the same Qt version. Check with:
+Make sure all components use the same Qt 6 installation. Configure its package
+directory explicitly when multiple Qt installations are present:
 
 .. code-block:: bash
 
-   cmake .. -DUSE_QT6=ON   # or OFF for Qt5
+   cmake .. -DQt6_DIR=/path/to/Qt/6.x/lib/cmake/Qt6
 
 **Linking errors on Windows**
 

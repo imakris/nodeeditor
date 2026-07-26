@@ -7,7 +7,9 @@ find_dependency(Qt6 6.5 REQUIRED COMPONENTS
                 Widgets
                 Gui
                 OpenGL)
-find_dependency(vnm_qt_dispatch CONFIG REQUIRED)
+if(@QT_NODES_PACKAGE_NEEDS_QT_DISPATCH@)
+    find_dependency(vnm_qt_dispatch CONFIG REQUIRED)
+endif()
 
 if(NOT TARGET QtNodes::QtNodes)
     include("${QtNodes_CMAKE_DIR}/QtNodesTargets.cmake")

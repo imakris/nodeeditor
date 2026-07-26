@@ -210,8 +210,8 @@ Tests are built automatically when ``BUILD_TESTING`` is enabled (default).
 
 **Prerequisites:**
   - Catch2 testing framework
-  - Qt6 (or Qt5 with appropriate configuration)
-  - CMake 3.8+
+  - Qt 6.5 or newer
+  - CMake 3.21+
 
 **Configuration:**
 
@@ -261,7 +261,7 @@ Troubleshooting
 **Common Issues:**
 
 * **Catch2 not found**: Install Catch2 or disable testing with ``-DBUILD_TESTING=OFF``
-* **Qt version conflicts**: Ensure consistent Qt5/Qt6 usage throughout build
+* **Qt version conflicts**: Ensure every target resolves the same Qt 6 installation
 * **Missing test binary**: Check that ``BUILD_TESTING`` is enabled in CMake configuration
 
 **Performance Notes:**

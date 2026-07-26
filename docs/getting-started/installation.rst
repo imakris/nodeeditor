@@ -4,21 +4,10 @@ Installation
 Requirements
 ------------
 
-- **Qt** 5.15+ or Qt 6.x
-- **Qt SVG module** (for processing status icons)
-- **CMake** 3.11+
+- **Qt** 6.5 or newer
+- **CMake** 3.21 or newer
 - **C++ Compiler** with C++17 support (GCC 7+, Clang 5+, MSVC 2019+)
 - **Catch2** (optional, for running tests)
-
-On Ubuntu/Debian, install Qt SVG with:
-
-.. code-block:: bash
-
-   # For Qt6
-   sudo apt install libqt6svg6
-
-   # For Qt5
-   sudo apt install libqt5svg5
 
 Building from Source
 --------------------
@@ -53,12 +42,9 @@ CMake Options
    * - Option
      - Default
      - Description
-   * - ``USE_QT6``
-     - ``ON``
-     - Build with Qt6. Set to ``OFF`` for Qt5.
    * - ``BUILD_SHARED_LIBS``
-     - ``ON``
-     - Build as shared library. Set to ``OFF`` for static.
+     - ``OFF``
+     - Build as a static library. Set to ``ON`` for shared.
    * - ``BUILD_TESTING``
      - ``ON``
      - Build unit tests. Requires Catch2.
@@ -69,9 +55,6 @@ CMake Options
 **Examples:**
 
 .. code-block:: bash
-
-   # Build with Qt5
-   cmake .. -DUSE_QT6=OFF
 
    # Build static library
    cmake .. -DBUILD_SHARED_LIBS=OFF
