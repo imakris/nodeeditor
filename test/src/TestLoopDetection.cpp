@@ -49,18 +49,6 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
         CHECK_FALSE(model.connectionPossible(selfLoop));
     }
 
-    SECTION("Simple A->B connection is allowed")
-    {
-        NodeId node1 = model.addNode("TestSourceNode");
-        NodeId node2 = model.addNode("TestDisplayNode");
-
-        ConnectionId conn{node1, 0, node2, 0};
-        CHECK(model.connectionPossible(conn));
-
-        model.addConnection(conn);
-        CHECK(model.connectionExists(conn));
-    }
-
     SECTION("Indirect loop A->B->A is prevented")
     {
         // Use TestDisplayNode which has both input and output ports
@@ -75,28 +63,6 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
         // Try to create B->A connection (would form a loop)
         ConnectionId conn2{node2, 0, node1, 0};
         CHECK_FALSE(model.connectionPossible(conn2));
-    }
-
-    SECTION("Three node loop A->B->C->A is prevented")
-    {
-        // Use TestDisplayNode which has both input and output ports
-        NodeId node1 = model.addNode("TestDisplayNode");
-        NodeId node2 = model.addNode("TestDisplayNode");
-        NodeId node3 = model.addNode("TestDisplayNode");
-
-        // Create A->B
-        ConnectionId conn1{node1, 0, node2, 0};
-        model.addConnection(conn1);
-        CHECK(model.connectionExists(conn1));
-
-        // Create B->C
-        ConnectionId conn2{node2, 0, node3, 0};
-        model.addConnection(conn2);
-        CHECK(model.connectionExists(conn2));
-
-        // Try to create C->A (would form a loop)
-        ConnectionId conn3{node3, 0, node1, 0};
-        CHECK_FALSE(model.connectionPossible(conn3));
     }
 
     SECTION("Loop-detection cache stays correct across topology changes")

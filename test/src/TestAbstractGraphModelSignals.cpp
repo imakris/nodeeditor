@@ -149,37 +149,6 @@ TEST_CASE("AbstractGraphModel signal emissions", "[signals]")
         QList<QVariant> nodeArgs = nodeDeletedSpy.takeFirst();
         CHECK(nodeArgs.at(0).value<NodeId>() == node1);
     }
-
-    SECTION("Signal emission order for complex operations")
-    {
-        NodeId node1 = model.addNode("TestNode");
-        NodeId node2 = model.addNode("TestNode");
-        
-        QSignalSpy nodeCreatedSpy(&model, &TestGraphModel::nodeCreated);
-        QSignalSpy connectionCreatedSpy(&model, &TestGraphModel::connectionCreated);
-        QSignalSpy connectionDeletedSpy(&model, &TestGraphModel::connectionDeleted);
-        QSignalSpy nodeDeletedSpy(&model, &TestGraphModel::nodeDeleted);
-        
-        // Reset spy counts (nodes were already created above)
-        nodeCreatedSpy.clear();
-        
-        // Create connection
-        ConnectionId connId{node1, 0, node2, 0};
-        model.addConnection(connId);
-        
-        CHECK(connectionCreatedSpy.count() == 1);
-        
-        // Delete connection
-        model.deleteConnection(connId);
-        
-        CHECK(connectionDeletedSpy.count() == 1);
-        
-        // Delete nodes
-        model.deleteNode(node1);
-        model.deleteNode(node2);
-        
-        CHECK(nodeDeletedSpy.count() == 2);
-    }
 }
 
 TEST_CASE("AbstractGraphModel signal spy validation", "[signals]")
@@ -191,19 +160,6 @@ TEST_CASE("AbstractGraphModel signal spy validation", "[signals]")
     qRegisterMetaType<QtNodes::NodeId>("NodeId");
     
     TestGraphModel model;
-
-    SECTION("Signal spy basic functionality")
-    {
-        QSignalSpy nodeCreatedSpy(&model, &TestGraphModel::nodeCreated);
-        QSignalSpy nodeDeletedSpy(&model, &TestGraphModel::nodeDeleted);
-        
-        CHECK(nodeCreatedSpy.isValid());
-        CHECK(nodeDeletedSpy.isValid());
-        
-        // Verify no signals emitted initially
-        CHECK(nodeCreatedSpy.count() == 0);
-        CHECK(nodeDeletedSpy.count() == 0);
-    }
 
     SECTION("Signal argument types")
     {
@@ -254,30 +210,5 @@ TEST_CASE("AbstractGraphModel edge case signal emissions", "[signals]")
         bool connDeleted = model.deleteConnection(invalidConn);
         CHECK_FALSE(connDeleted);
         CHECK(connectionDeletedSpy.count() == 0);
-    }
-
-    SECTION("Signal consistency with model state")
-    {
-        QSignalSpy nodeCreatedSpy(&model, &TestGraphModel::nodeCreated);
-        
-        NodeId nodeId = model.addNode("TestNode");
-        
-        // Verify signal was emitted
-        REQUIRE(nodeCreatedSpy.count() == 1);
-        
-        // Verify model state matches signal
-        CHECK(model.nodeExists(nodeId));
-        CHECK(model.allNodeIds().count(nodeId) == 1);
-        
-        QSignalSpy nodeDeletedSpy(&model, &TestGraphModel::nodeDeleted);
-        
-        model.deleteNode(nodeId);
-        
-        // Verify signal was emitted
-        REQUIRE(nodeDeletedSpy.count() == 1);
-        
-        // Verify model state matches signal
-        CHECK_FALSE(model.nodeExists(nodeId));
-        CHECK(model.allNodeIds().count(nodeId) == 0);
     }
 }

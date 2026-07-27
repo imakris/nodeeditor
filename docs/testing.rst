@@ -110,9 +110,7 @@ Test Categories
 **Signal Tests ([signals])**
   - Signal emission verification for all AbstractGraphModel signals
   - Signal spy validation and argument type checking
-  - Signal consistency with model state
   - Edge case signal behavior (invalid operations)
-  - Complex operation signal ordering
 
 **DataFlow Tests ([dataflow])**
   - DataFlowGraphModel operations
@@ -138,7 +136,6 @@ Test Categories
 
 **Graphics Tests ([graphics])**
   - BasicGraphicsScene functionality
-  - Graphics undo/redo support
   - Scene management
 
 **UI Interaction Tests ([ui], [visual], [stress])**

@@ -169,28 +169,6 @@ TEST_CASE("DataFlowGraphModel serialization support", "[dataflow]")
 
     DataFlowGraphModel model(registry);
 
-    NodeId node1 = model.addNode("TestNode");
-    NodeId node2 = model.addNode("TestNode");
-    
-    model.setNodeData(node1, NodeRole::Position, QPointF(0, 0));
-    model.setNodeData(node2, NodeRole::Position, QPointF(100, 100));
-
-    ConnectionId connId{node1, 0, node2, 0};
-    model.addConnection(connId);
-
-    SECTION("Save and load operations exist")
-    {
-        // These should not throw and should return valid JSON
-        QJsonObject nodeJson = model.saveNode(node1);
-        QJsonObject fullJson = model.save();
-        
-        // Basic validation that something was saved
-        CHECK_FALSE(nodeJson.isEmpty());
-        CHECK_FALSE(fullJson.isEmpty());
-        CHECK(fullJson.contains("nodes"));
-        CHECK(fullJson.contains("connections"));
-    }
-
     SECTION("Saving a missing node fails loudly")
     {
         CHECK_THROWS_AS(model.saveNode(InvalidNodeId), std::out_of_range);

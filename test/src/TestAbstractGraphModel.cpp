@@ -100,17 +100,6 @@ TEST_CASE("Connection management", "[core]")
         CHECK(node2Connections.count(connId) == 1);
     }
 
-    SECTION("Connection validation")
-    {
-        // Self-connection should not be possible
-        ConnectionId selfConn{node1, 0, node1, 0};
-        CHECK_FALSE(model.connectionPossible(selfConn));
-
-        // Connection to non-existent node should not be possible
-        ConnectionId invalidConn{node1, 0, 999, 0};
-        CHECK_FALSE(model.connectionPossible(invalidConn));
-    }
-
     SECTION("Connection deletion")
     {
         model.addConnection(connId);

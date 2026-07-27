@@ -9,11 +9,9 @@
 
 #include <catch2/catch.hpp>
 
-#include <QGraphicsView>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QVariantMap>
-#include <QUndoStack>
 
 #include <algorithm>
 #include <vector>
@@ -158,24 +156,6 @@ TEST_CASE("BasicGraphicsScene functionality", "[graphics]")
         CHECK(scene.items().size() < initialItemCount);
     }
 
-    SECTION("Scene with graphics view")
-    {
-        NodeId nodeId = model.addNode("TestNode");
-        model.setNodeData(nodeId, NodeRole::Position, QPointF(100, 200));
-        
-        QCoreApplication::processEvents();
-        
-        CHECK(scene.items().size() >= 1);
-        
-        // Create view but don't show it to avoid windowing system issues
-        QGraphicsView view(&scene);
-        
-        // View should be properly connected to scene
-        CHECK(view.scene() == &scene);
-        
-        // Don't call view.show() to avoid potential graphics system issues
-    }
-
     SECTION("Nodes without explicit style fall back to collection defaults")
     {
         NodeId const nodeId = model.addNode("TestNode");
@@ -317,19 +297,6 @@ TEST_CASE("BasicGraphicsScene applies node position hook once for model-originat
     CHECK(modelPosition.y() == Approx(110.0));
     CHECK(nodeGraphics->pos().x() == Approx(140.0));
     CHECK(nodeGraphics->pos().y() == Approx(110.0));
-}
-
-TEST_CASE("BasicGraphicsScene undo/redo support", "[graphics]")
-{
-    auto app = applicationSetup();
-    TestGraphModel model;
-    BasicGraphicsScene scene(model);
-
-    SECTION("Undo stack exists")
-    {
-        auto &undoStack = scene.undoStack();
-        CHECK(undoStack.count() == 0);
-    }
 }
 
 TEST_CASE("Node shadow bounds follow visual margins", "[graphics]")

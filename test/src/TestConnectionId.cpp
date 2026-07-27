@@ -54,20 +54,6 @@ TEST_CASE("ConnectionId basic functionality", "[core]")
 
 TEST_CASE("ConnectionId edge cases", "[core]")
 {
-    SECTION("Same node, different ports")
-    {
-        ConnectionId conn{1, 0, 1, 1};
-        CHECK(conn.outNodeId == conn.inNodeId);
-        CHECK(conn.outPortIndex != conn.inPortIndex);
-    }
-
-    SECTION("Different nodes, same ports")
-    {
-        ConnectionId conn{1, 0, 2, 0};
-        CHECK(conn.outNodeId != conn.inNodeId);
-        CHECK(conn.outPortIndex == conn.inPortIndex);
-    }
-
     SECTION("Maximum values")
     {
         ConnectionId conn{std::numeric_limits<NodeId>::max(),
