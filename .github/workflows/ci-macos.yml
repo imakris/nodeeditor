@@ -33,7 +33,6 @@ jobs:
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DBUILD_DOCS=OFF
-          -DUSE_QT6=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel
