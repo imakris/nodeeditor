@@ -3,7 +3,10 @@
 #include <QtNodes/DataFlowGraphModel>
 #include <QtNodes/NodeDelegateModel>
 #include <QtNodes/NodeDelegateModelRegistry>
+#include <QtNodes/NodeStyle>
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 
 using QtNodes::DataFlowGraphModel;
@@ -12,9 +15,22 @@ using QtNodes::NodeDelegateModelRegistry;
 using QtNodes::NodeId;
 using QtNodes::NodeProcessingStatus;
 using QtNodes::NodeRole;
+using QtNodes::NodeStyle;
 using QtNodes::NodeValidationState;
 using QtNodes::PortIndex;
 using QtNodes::PortType;
+
+namespace {
+
+void check_partial_overlay(NodeStyle const &style, NodeStyle const &defaults)
+{
+    CHECK(style.PenWidth == 0.0f);
+    CHECK(style.HoveredPenWidth == defaults.HoveredPenWidth);
+    CHECK(style.FilledConnectionPointColor == defaults.FilledConnectionPointColor);
+    CHECK_FALSE(style.statusProcessing.isNull());
+}
+
+} // namespace
 
 /// Test delegate model that exposes validation and status setters
 class TestValidatedModel : public NodeDelegateModel
@@ -126,6 +142,33 @@ TEST_CASE("NodeProcessingStatus enum values", "[validation]")
     CHECK(static_cast<int>(NodeProcessingStatus::Empty) == 4);
     CHECK(static_cast<int>(NodeProcessingStatus::Failed) == 5);
     CHECK(static_cast<int>(NodeProcessingStatus::Partial) == 6);
+}
+
+TEST_CASE("Partial NodeStyle JSON overlays preserve defaults", "[style]")
+{
+    NodeStyle const defaults;
+    REQUIRE(defaults.PenWidth != 0.0f);
+    REQUIRE(defaults.HoveredPenWidth != 0.0f);
+    REQUIRE(defaults.FilledConnectionPointColor.isValid());
+    REQUIRE_FALSE(defaults.statusProcessing.isNull());
+
+    QJsonObject node_style;
+    node_style["PenWidth"] = 0.0;
+
+    QJsonObject json;
+    json["NodeStyle"] = node_style;
+
+    SECTION("QJsonObject constructor")
+    {
+        check_partial_overlay(NodeStyle(json), defaults);
+    }
+
+    SECTION("QString constructor")
+    {
+        QString const json_text = QString::fromUtf8(
+            QJsonDocument(json).toJson(QJsonDocument::Compact));
+        check_partial_overlay(NodeStyle(json_text), defaults);
+    }
 }
 
 #include "TestNodeValidation.moc"

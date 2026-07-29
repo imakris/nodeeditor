@@ -33,11 +33,13 @@ NodeStyle::NodeStyle()
 }
 
 NodeStyle::NodeStyle(QString jsonText)
+    : NodeStyle()
 {
     loadJsonText(jsonText);
 }
 
 NodeStyle::NodeStyle(QJsonObject const &json)
+    : NodeStyle()
 {
     loadJson(json);
 }
