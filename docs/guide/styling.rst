@@ -20,7 +20,9 @@ Styles are managed by ``StyleCollection`` and stored as JSON internally:
 Setting Styles Globally
 -----------------------
 
-Apply styles to all new objects:
+These are the defaults every object falls back to. Installing one applies to
+every object that does not carry a style of its own, whether it already exists
+or is created later:
 
 .. code-block:: cpp
 

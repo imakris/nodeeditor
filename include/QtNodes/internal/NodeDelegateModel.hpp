@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <QMetaType>
 #include <QImage>
@@ -75,7 +76,7 @@ class NODE_EDITOR_PUBLIC NodeDelegateModel
     Q_OBJECT
 
 public:
-    NodeDelegateModel();
+    NodeDelegateModel() = default;
 
     virtual ~NodeDelegateModel() = default;
 
@@ -115,8 +116,13 @@ public:
 
     virtual ConnectionPolicy portConnectionPolicy(PortType, PortIndex) const;
 
+    /**
+     * The style this node is drawn and hit-tested with: the node's own style if
+     * one was installed, otherwise the current StyleCollection default.
+     */
     NodeStyle const &nodeStyle() const;
 
+    /// Installs a style that overrides the StyleCollection default for this node only.
     void setNodeStyle(NodeStyle const &style);
 
     /// Convenience helper to change the node background color.
@@ -203,7 +209,11 @@ Q_SIGNALS:
     void portsInserted();
 
 private:
-    NodeStyle _nodeStyle;
+    /// Materializes the per-node override, seeded from the current default.
+    NodeStyle &overriddenNodeStyle();
+
+private:
+    std::optional<NodeStyle> _nodeStyle;
 
     bool _frozen{false};
 

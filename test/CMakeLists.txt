@@ -16,6 +16,7 @@ add_executable(test_nodes
   src/TestNodeValidation.cpp
   src/TestCustomPainters.cpp
   src/TestPortHitTesting.cpp
+  src/TestNodeStyleResolution.cpp
   src/TestCopyPaste.cpp
   src/TestZoomFeatures.cpp
   src/TestLoopDetection.cpp

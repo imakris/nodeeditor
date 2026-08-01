@@ -33,12 +33,6 @@ QIcon const &status_icon(NodeStyle const &style, NodeProcessingStatus status)
 
 } // namespace
 
-NodeDelegateModel::NodeDelegateModel()
-    : _nodeStyle(StyleCollection::nodeStyle())
-{
-    // Derived classes can initialize specific style here
-}
-
 QJsonObject NodeDelegateModel::save() const
 {
     QJsonObject modelJson;
@@ -86,7 +80,16 @@ ConnectionPolicy NodeDelegateModel::portConnectionPolicy(PortType portType, Port
 
 NodeStyle const &NodeDelegateModel::nodeStyle() const
 {
-    return _nodeStyle;
+    return _nodeStyle ? *_nodeStyle : StyleCollection::nodeStyle();
+}
+
+NodeStyle &NodeDelegateModel::overriddenNodeStyle()
+{
+    if (!_nodeStyle) {
+        _nodeStyle = StyleCollection::nodeStyle();
+    }
+
+    return *_nodeStyle;
 }
 
 void NodeDelegateModel::setNodeStyle(NodeStyle const &style)
@@ -102,7 +105,8 @@ QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
     // render_icon_image() drives QPainter and QIcon::paint(), which are GUI-thread only.
     Q_ASSERT(thread() == QThread::currentThread());
 
-    int const resolution = _nodeStyle.processingIconStyle._resolution;
+    NodeStyle const &style = nodeStyle();
+    int const resolution = style.processingIconStyle._resolution;
 
     if (_processingStatus == NodeProcessingStatus::NoStatus) {
         return {};
@@ -115,7 +119,7 @@ QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
     }
 
     _cachedProcessingStatusImage = node_rendering::render_icon_image(
-        status_icon(_nodeStyle, _processingStatus),
+        status_icon(style, _processingStatus),
         QSize(resolution, resolution),
         dpr);
 
@@ -129,7 +133,7 @@ QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
 
 ProcessingIconStyle NodeDelegateModel::processingIconStyle() const
 {
-    return _nodeStyle.processingIconStyle;
+    return nodeStyle().processingIconStyle;
 }
 
 void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap &pixmap)
@@ -137,26 +141,28 @@ void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap
     // QPixmap may not be used outside the GUI thread.
     Q_ASSERT(thread() == QThread::currentThread());
 
+    NodeStyle &style = overriddenNodeStyle();
+
     switch (status) {
     case NodeProcessingStatus::NoStatus:
         break;
     case NodeProcessingStatus::Updated:
-        _nodeStyle.statusUpdated = QIcon(pixmap);
+        style.statusUpdated = QIcon(pixmap);
         break;
     case NodeProcessingStatus::Processing:
-        _nodeStyle.statusProcessing = QIcon(pixmap);
+        style.statusProcessing = QIcon(pixmap);
         break;
     case NodeProcessingStatus::Pending:
-        _nodeStyle.statusPending = QIcon(pixmap);
+        style.statusPending = QIcon(pixmap);
         break;
     case NodeProcessingStatus::Empty:
-        _nodeStyle.statusEmpty = QIcon(pixmap);
+        style.statusEmpty = QIcon(pixmap);
         break;
     case NodeProcessingStatus::Failed:
-        _nodeStyle.statusInvalid = QIcon(pixmap);
+        style.statusInvalid = QIcon(pixmap);
         break;
     case NodeProcessingStatus::Partial:
-        _nodeStyle.statusPartial = QIcon(pixmap);
+        style.statusPartial = QIcon(pixmap);
         break;
     }
 
@@ -167,7 +173,7 @@ void NodeDelegateModel::setStatusIconStyle(const ProcessingIconStyle &style)
 {
     Q_ASSERT(thread() == QThread::currentThread());
 
-    _nodeStyle.processingIconStyle = style;
+    overriddenNodeStyle().processingIconStyle = style;
     _processingStatusIconDirty = true;
 }
 
@@ -183,7 +189,7 @@ void NodeDelegateModel::setBackgroundColor(QColor const &color)
 {
     Q_ASSERT(thread() == QThread::currentThread());
 
-    _nodeStyle.setBackgroundColor(color);
+    overriddenNodeStyle().setBackgroundColor(color);
 }
 
 } // namespace QtNodes
