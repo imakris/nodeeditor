@@ -39,6 +39,14 @@ public:
     virtual ~NodeStyle() = default;
 
 public:
+    /**
+     * Installs the process-wide default node style from JSON text.
+     *
+     * This is the global default every node falls back to, not a per-node
+     * setting: the per-node one is NodeDelegateModel::setNodeStyle. Nodes that
+     * carry no style of their own follow whatever default is installed here,
+     * whether they already exist or are created later.
+     */
     static void setNodeStyle(QString jsonText);
 
 public:
