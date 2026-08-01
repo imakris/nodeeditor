@@ -300,8 +300,7 @@ TEST_CASE("GraphicsView node cache policy", "[zoom]")
         CHECK(view.isZoomAnimating());
         CHECK(nodeGraphics->cacheMode() == QGraphicsItem::NoCache);
 
-        QTest::qWait(500);
-        CHECK_FALSE(view.isZoomAnimating());
+        QTRY_VERIFY_WITH_TIMEOUT(!view.isZoomAnimating(), 2000);
         CHECK(nodeGraphics->cacheMode() == QGraphicsItem::DeviceCoordinateCache);
     }
 

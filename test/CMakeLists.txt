@@ -45,6 +45,11 @@ add_test(
     $<$<BOOL:${QT_NODES_FORCE_TEST_COLOR}>:--use-colour=yes>
 )
 
+# The suite runs in a few seconds. The budget only exists so a wedged run, or a
+# launch that blocks on a Windows missing-DLL hard error, fails instead of
+# hanging the whole gate.
+set_tests_properties(test_nodes PROPERTIES TIMEOUT 300)
+
 set(qt_nodes_installed_consumer_arguments
   "-DQT_NODES_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
   "-DQT_NODES_TOP_BINARY_DIR=${PROJECT_BINARY_DIR}"
@@ -66,9 +71,13 @@ foreach(qt_nodes_library_mode IN ITEMS static shared)
       ${qt_nodes_installed_consumer_arguments}
       "-DQT_NODES_TEST_LIBRARY_MODE=${qt_nodes_library_mode}"
       -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_installed_consumer.cmake")
+  # Each mode configures, builds and installs the whole library from scratch and
+  # then configures and builds a consumer against the staged package. That took
+  # 295 s of the previous 300 s budget on a developer workstation, so the gate
+  # failed on timing noise rather than on a defect.
   set_tests_properties(
     qt_nodes_installed_consumer_${qt_nodes_library_mode}
     PROPERTIES
-      TIMEOUT 300
+      TIMEOUT 1800
       RUN_SERIAL TRUE)
 endforeach()
