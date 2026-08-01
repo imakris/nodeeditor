@@ -25,6 +25,7 @@
 #include <QtCore/QJsonParseError>
 #include <QtCore/QJsonValue>
 #include <QtCore/QtGlobal>
+#include <QtGui/QUndoStack>
 
 #include <stdexcept>
 #include <unordered_set>
@@ -396,6 +397,8 @@ bool DataFlowGraphicsScene::load()
         return false;
     }
 
+    undoStack().clear();
+    undoStack().setClean();
     Q_EMIT sceneLoaded();
 
     return true;
