@@ -1,14 +1,17 @@
 #pragma once
 
+#include "AbstractGraphModel.hpp"
 #include "Definitions.hpp"
 #include "Export.hpp"
 
+#include <QUndoCommand>
 #include <QtCore/QJsonObject>
 #include <QtCore/QPointF>
 #include <QtCore/QString>
-#include <QUndoCommand>
 
+#include <memory>
 #include <unordered_set>
+#include <vector>
 
 namespace QtNodes {
 
@@ -97,6 +100,25 @@ private:
     BasicGraphicsScene *_scene;
 
     ConnectionId _connId;
+};
+
+/** Replaces one exact connection set with a candidate as a single history entry. */
+class NODE_EDITOR_PUBLIC ReplaceConnectionCommand : public QUndoCommand
+{
+public:
+    /// Fully prepares the model-owned transaction before history admission.
+    ReplaceConnectionCommand(BasicGraphicsScene *scene,
+                             ConnectionId const candidateConnectionId,
+                             std::vector<ConnectionId> replacedConnectionIds);
+
+    /// Exchanges the committed state with the exact prepared prior state.
+    void undo() noexcept override;
+
+    /// Exchanges the prior state with the exact prepared committed state.
+    void redo() noexcept override;
+
+private:
+    std::unique_ptr<ConnectionReplacementTransaction> _transaction;
 };
 
 class NODE_EDITOR_PUBLIC MoveNodeCommand : public QUndoCommand

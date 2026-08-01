@@ -110,7 +110,7 @@ TEST_CASE("DataFlowGraphModel connections", "[dataflow]")
     {
         ConnectionId connId{node1, 0, node2, 0};
 
-        CHECK(model.connectionPossible(connId));
+        CHECK(model.connectionPossible(connId, {}));
         model.addConnection(connId);
         CHECK(model.connectionExists(connId));
 
@@ -123,18 +123,18 @@ TEST_CASE("DataFlowGraphModel connections", "[dataflow]")
     {
         // Valid ports (TestNode has 1 output, 2 inputs)
         ConnectionId validConn{node1, 0, node2, 0};
-        CHECK(model.connectionPossible(validConn));
+        CHECK(model.connectionPossible(validConn, {}));
 
         ConnectionId validConn2{node1, 0, node2, 1};
-        CHECK(model.connectionPossible(validConn2));
+        CHECK(model.connectionPossible(validConn2, {}));
 
         // Invalid output port (only has port 0)
         ConnectionId invalidOut{node1, 1, node2, 0};
-        CHECK_FALSE(model.connectionPossible(invalidOut));
+        CHECK_FALSE(model.connectionPossible(invalidOut, {}));
 
         // Invalid input port (only has ports 0 and 1)
         ConnectionId invalidIn{node1, 0, node2, 2};
-        CHECK_FALSE(model.connectionPossible(invalidIn));
+        CHECK_FALSE(model.connectionPossible(invalidIn, {}));
     }
 
     SECTION("Loop connection between three nodes")
@@ -143,19 +143,19 @@ TEST_CASE("DataFlowGraphModel connections", "[dataflow]")
 
         ConnectionId connId12{node1, 0, node2, 0};
 
-        CHECK(model.connectionPossible(connId12));
+        CHECK(model.connectionPossible(connId12, {}));
         model.addConnection(connId12);
         CHECK(model.connectionExists(connId12));
 
         ConnectionId connId23{node2, 0, node3, 0};
 
-        CHECK(model.connectionPossible(connId23));
+        CHECK(model.connectionPossible(connId23, {}));
         model.addConnection(connId23);
         CHECK(model.connectionExists(connId23));
 
         ConnectionId connId31{node3, 0, node1, 0};
 
-        CHECK_FALSE(model.connectionPossible(connId31));
+        CHECK_FALSE(model.connectionPossible(connId31, {}));
         model.addConnection(connId31);
         CHECK_FALSE(model.connectionExists(connId31));
     }
@@ -171,7 +171,7 @@ TEST_CASE("DataFlowGraphModel serialization support", "[dataflow]")
 
     NodeId node1 = model.addNode("TestNode");
     NodeId node2 = model.addNode("TestNode");
-    
+
     model.setNodeData(node1, NodeRole::Position, QPointF(0, 0));
     model.setNodeData(node2, NodeRole::Position, QPointF(100, 100));
 
@@ -183,7 +183,7 @@ TEST_CASE("DataFlowGraphModel serialization support", "[dataflow]")
         // These should not throw and should return valid JSON
         QJsonObject nodeJson = model.saveNode(node1);
         QJsonObject fullJson = model.save();
-        
+
         // Basic validation that something was saved
         CHECK_FALSE(nodeJson.isEmpty());
         CHECK_FALSE(fullJson.isEmpty());

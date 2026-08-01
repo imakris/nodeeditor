@@ -6,11 +6,13 @@
 #include "Definitions.hpp"
 #include "GroupGraphicsObject.hpp"
 #include "NodeGraphicsObject.hpp"
-#include "selection_utils.hpp"
 #include "SerializationValidation.hpp"
+#include "selection_utils.hpp"
 
 #include <stdexcept>
 #include <unordered_set>
+#include <utility>
+#include <QtCore/QDebug>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMimeData>
@@ -36,6 +38,22 @@ ConnectionId connection_id_from_json(QJsonObject const &connJson)
     }
 
     return connId;
+}
+
+void publishConnectionReplacement(ConnectionReplacementTransaction &transaction,
+                                  bool const undo) noexcept
+{
+    try {
+        if (undo) {
+            transaction.publishUndo();
+        } else {
+            transaction.publishRedo();
+        }
+    } catch (std::exception const &error) {
+        qWarning() << "Connection replacement publication failed:" << error.what();
+    } catch (...) {
+        qWarning() << "Connection replacement publication failed with an unknown exception";
+    }
 }
 
 QPointF point_from_json(QJsonObject const &json, QString const &key)
@@ -277,10 +295,9 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
     // Delete the selected connections first, ensuring that they won't be
     // automatically deleted when selected nodes are deleted (deleting a
     // node deletes some connections as well)
-    detail::for_each_selected<ConnectionGraphicsObject>(
-        _scene, [&](ConnectionGraphicsObject *c) {
-            connJsonArray.append(toJson(c->connectionId()));
-        });
+    detail::for_each_selected<ConnectionGraphicsObject>(_scene, [&](ConnectionGraphicsObject *c) {
+        connJsonArray.append(toJson(c->connectionId()));
+    });
 
     QJsonArray nodesJsonArray;
     // Delete the nodes; this will delete many of the connections.
@@ -495,10 +512,7 @@ QJsonObject PasteCommand::makeNewNodeIdsInScene(QJsonObject const &sceneJson)
             continue;
         }
 
-        ConnectionId newConnId{outIt->second,
-                               connId.outPortIndex,
-                               inIt->second,
-                               connId.inPortIndex};
+        ConnectionId newConnId{outIt->second, connId.outPortIndex, inIt->second, connId.inPortIndex};
 
         newConnJsonArray.append(toJson(newConnId));
     }
@@ -571,6 +585,41 @@ void ConnectCommand::undo()
 void ConnectCommand::redo()
 {
     _scene->graphModel().addConnection(_connId);
+}
+
+//------
+
+ReplaceConnectionCommand::ReplaceConnectionCommand(BasicGraphicsScene *scene,
+                                                   ConnectionId const candidateConnectionId,
+                                                   std::vector<ConnectionId> replacedConnectionIds)
+{
+    if (replacedConnectionIds.size() == 1U
+        && replacedConnectionIds.front() == candidateConnectionId) {
+        setObsolete(true);
+        return;
+    }
+
+    _transaction = scene->graphModel().prepareConnectionReplacement(replacedConnectionIds,
+                                                                    {candidateConnectionId});
+    if (!_transaction) {
+        setObsolete(true);
+    }
+}
+
+void ReplaceConnectionCommand::undo() noexcept
+{
+    if (_transaction) {
+        _transaction->undo();
+        publishConnectionReplacement(*_transaction, true);
+    }
+}
+
+void ReplaceConnectionCommand::redo() noexcept
+{
+    if (_transaction) {
+        _transaction->redo();
+        publishConnectionReplacement(*_transaction, false);
+    }
 }
 
 //------

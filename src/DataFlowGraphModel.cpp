@@ -3,6 +3,7 @@
 #include "ConnectionIdUtils.hpp"
 #include "Definitions.hpp"
 
+#include <QDebug>
 #include <QJsonArray>
 #include <QJsonValue>
 
@@ -13,6 +14,30 @@
 
 namespace QtNodes {
 
+namespace {
+
+template<typename Notification>
+void publishConnectionReplacementNotification(Notification &&notification)
+{
+    try {
+        notification();
+    } catch (std::exception const &error) {
+        qWarning() << "Connection replacement notification failed:" << error.what();
+    } catch (...) {
+        qWarning() << "Connection replacement notification failed with an unknown exception";
+    }
+}
+
+void reportConnectionReplacementDataFailure(std::exception const *error)
+{
+    if (error) {
+        qWarning() << "Connection replacement data publication failed:" << error->what();
+    } else {
+        qWarning() << "Connection replacement data publication failed with an unknown exception";
+    }
+}
+
+} // namespace
 
 DataFlowGraphModel::DataFlowGraphModel(std::shared_ptr<NodeDelegateModelRegistry> registry)
     : _registry(std::move(registry))
@@ -24,14 +49,15 @@ AbstractGraphModel::NodeIdSet const &DataFlowGraphModel::allNodeIds() const
     return _nodeIds;
 }
 
-AbstractGraphModel::ConnectionIdSet const &
-DataFlowGraphModel::allConnectionIds(NodeId const nodeId) const
+AbstractGraphModel::ConnectionIdSet const &DataFlowGraphModel::allConnectionIds(
+    NodeId const nodeId) const
 {
     return _connectionIndex.allConnectionIds(nodeId);
 }
 
-AbstractGraphModel::ConnectionIdSet const &DataFlowGraphModel::connections(
-    NodeId nodeId, PortType portType, PortIndex portIndex) const
+AbstractGraphModel::ConnectionIdSet const &DataFlowGraphModel::connections(NodeId nodeId,
+                                                                           PortType portType,
+                                                                           PortIndex portIndex) const
 {
     return _connectionIndex.connections(nodeId, portType, portIndex);
 }
@@ -62,10 +88,20 @@ NodeId DataFlowGraphModel::addNode(QString const nodeType)
     return InvalidNodeId;
 }
 
-bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) const
+bool DataFlowGraphModel::connectionPossible(
+    ConnectionId const connectionId, std::vector<ConnectionId> const &replacedConnectionIds) const
 {
+    auto isReplaced = [&](ConnectionId const &candidate) {
+        return std::find(replacedConnectionIds.begin(), replacedConnectionIds.end(), candidate)
+               != replacedConnectionIds.end();
+    };
+
     // Check if nodes exist
     if (!nodeExists(connectionId.outNodeId) || !nodeExists(connectionId.inNodeId)) {
+        return false;
+    }
+
+    if (connectionExists(connectionId) && !isReplaced(connectionId)) {
         return false;
     }
 
@@ -93,7 +129,11 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
         auto policy = portData(nodeId, portType, portIndex, PortRole::ConnectionPolicy)
                           .value<ConnectionPolicy>();
 
-        return connected.empty() || (policy == ConnectionPolicy::Many);
+        if (policy == ConnectionPolicy::Many) {
+            return true;
+        }
+
+        return std::all_of(connected.begin(), connected.end(), isReplaced);
     };
 
     bool const portsValid = checkPortBounds(PortType::Out) && checkPortBounds(PortType::In);
@@ -108,7 +148,7 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
     // We perform depth-first graph traversal starting from the "Input" port of
     // the given connection. We should never encounter the starting "Out" node.
 
-    auto hasLoops = [this, &connectionId]() -> bool {
+    auto hasLoops = [this, &connectionId, &isReplaced]() -> bool {
         std::stack<NodeId> filo;
         std::unordered_set<NodeId> visited;
         filo.push(connectionId.inNodeId);
@@ -132,6 +172,9 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
                 auto const &outConnectionIds = connections(id, PortType::Out, index);
 
                 for (auto cid : outConnectionIds) {
+                    if (isReplaced(cid)) {
+                        continue;
+                    }
                     filo.push(cid.inNodeId);
                 }
             }
@@ -144,6 +187,10 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
     // memoize it: during a connection drag the painter asks connectionPossible() for
     // every in-port of the hovered node on every repaint, all with the same node pair.
     auto hasLoopsCached = [&]() -> bool {
+        if (!replacedConnectionIds.empty()) {
+            return hasLoops();
+        }
+
         std::uint64_t const key = (static_cast<std::uint64_t>(connectionId.outNodeId) << 32)
                                   | static_cast<std::uint64_t>(connectionId.inNodeId);
 
@@ -160,9 +207,84 @@ bool DataFlowGraphModel::connectionPossible(ConnectionId const connectionId) con
     return basicChecks && (loopsEnabled() || !hasLoopsCached());
 }
 
+std::unique_ptr<ConnectionReplacementTransaction> DataFlowGraphModel::prepareConnectionReplacement(
+    std::vector<ConnectionId> const &removedConnectionIds,
+    std::vector<ConnectionId> const &addedConnectionIds) noexcept
+{
+    try {
+        if (addedConnectionIds.size() != 1U) {
+            return {};
+        }
+
+        for (ConnectionId const connectionId : removedConnectionIds) {
+            if (!connectionExists(connectionId) || !detachPossible(connectionId)) {
+                return {};
+            }
+        }
+
+        if (!connectionPossible(addedConnectionIds.front(), removedConnectionIds)) {
+            return {};
+        }
+
+        auto preparedIndex = _connectionIndex.preparedReplacement(removedConnectionIds,
+                                                                  addedConnectionIds);
+        if (!preparedIndex) {
+            return {};
+        }
+
+        auto publisher = [this](std::vector<ConnectionId> const &removedIds,
+                                std::vector<ConnectionId> const &addedIds) {
+            _loopReachabilityCache.clear();
+
+            // The complete topology is committed before any observer callback.
+            for (ConnectionId const connectionId : removedIds) {
+                publishConnectionReplacementNotification(
+                    [&] { sendConnectionDeletion(connectionId); });
+                try {
+                    propagateEmptyDataTo(connectionId.inNodeId, connectionId.inPortIndex);
+                } catch (std::exception const &error) {
+                    reportConnectionReplacementDataFailure(&error);
+                } catch (...) {
+                    reportConnectionReplacementDataFailure(nullptr);
+                }
+            }
+
+            for (ConnectionId const connectionId : addedIds) {
+                publishConnectionReplacementNotification(
+                    [&] { sendConnectionCreation(connectionId); });
+
+                try {
+                    QVariant const currentData = portData(connectionId.outNodeId,
+                                                          PortType::Out,
+                                                          connectionId.outPortIndex,
+                                                          PortRole::Data);
+                    setPortData(connectionId.inNodeId,
+                                PortType::In,
+                                connectionId.inPortIndex,
+                                currentData,
+                                PortRole::Data);
+                } catch (std::exception const &error) {
+                    reportConnectionReplacementDataFailure(&error);
+                } catch (...) {
+                    reportConnectionReplacementDataFailure(nullptr);
+                }
+            }
+        };
+
+        using Transaction = ConnectionIdIndexReplacementTransaction<decltype(publisher)>;
+        return std::make_unique<Transaction>(_connectionIndex,
+                                             std::move(*preparedIndex),
+                                             removedConnectionIds,
+                                             addedConnectionIds,
+                                             std::move(publisher));
+    } catch (...) {
+        return {};
+    }
+}
+
 void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
 {
-    if (connectionExists(connectionId) || !connectionPossible(connectionId)) {
+    if (connectionExists(connectionId) || !connectionPossible(connectionId, {})) {
         return;
     }
 
@@ -185,11 +307,9 @@ void DataFlowGraphModel::addConnection(ConnectionId const connectionId)
 
 void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId nodeId)
 {
-    connect(model,
-            &NodeDelegateModel::dataUpdated,
-            [nodeId, this](PortIndex const portIndex) {
-                onOutPortDataUpdated(nodeId, portIndex);
-            });
+    connect(model, &NodeDelegateModel::dataUpdated, [nodeId, this](PortIndex const portIndex) {
+        onOutPortDataUpdated(nodeId, portIndex);
+    });
 
     connect(model,
             &NodeDelegateModel::portsAboutToBeDeleted,
@@ -198,10 +318,7 @@ void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId n
                 portsAboutToBeDeleted(nodeId, portType, first, last);
             });
 
-    connect(model,
-            &NodeDelegateModel::portsDeleted,
-            this,
-            &DataFlowGraphModel::portsDeleted);
+    connect(model, &NodeDelegateModel::portsDeleted, this, &DataFlowGraphModel::portsDeleted);
 
     connect(model,
             &NodeDelegateModel::portsAboutToBeInserted,
@@ -210,10 +327,7 @@ void DataFlowGraphModel::connectDelegateModel(NodeDelegateModel *model, NodeId n
                 portsAboutToBeInserted(nodeId, portType, first, last);
             });
 
-    connect(model,
-            &NodeDelegateModel::portsInserted,
-            this,
-            &DataFlowGraphModel::portsInserted);
+    connect(model, &NodeDelegateModel::portsInserted, this, &DataFlowGraphModel::portsInserted);
 
     connect(model, &NodeDelegateModel::requestNodeUpdate, this, [nodeId, this]() {
         Q_EMIT nodeUpdated(nodeId);
@@ -269,19 +383,19 @@ QVariant DataFlowGraphModel::nodeData(NodeId nodeId, NodeRole role) const
         break;
 
     case NodeRole::Position:
-        if (auto geometryIt = _nodeGeometryData.find(nodeId); geometryIt != _nodeGeometryData.end()) {
+        if (auto geometryIt = _nodeGeometryData.find(nodeId);
+            geometryIt != _nodeGeometryData.end()) {
             result = geometryIt->second.pos;
-        }
-        else {
+        } else {
             result = QPointF{};
         }
         break;
 
     case NodeRole::Size:
-        if (auto geometryIt = _nodeGeometryData.find(nodeId); geometryIt != _nodeGeometryData.end()) {
+        if (auto geometryIt = _nodeGeometryData.find(nodeId);
+            geometryIt != _nodeGeometryData.end()) {
             result = geometryIt->second.size;
-        }
-        else {
+        } else {
             result = QSize{};
         }
         break;
@@ -596,8 +710,8 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
     // loading.
     // 2. When undoing the deletion command.  Conflict is not possible
     // because all the new ids were created past the removed nodes.
-    NodeId restoredNodeId
-        = detail::read_node_id_or_throw(nodeJson["id"], "Invalid node id in serialized node");
+    NodeId restoredNodeId = detail::read_node_id_or_throw(nodeJson["id"],
+                                                          "Invalid node id in serialized node");
 
     if (_models.find(restoredNodeId) != _models.end()) {
         throw std::logic_error("Node identifier collision in serialized node");
@@ -618,7 +732,8 @@ void DataFlowGraphModel::loadNode(QJsonObject const &nodeJson)
     }
 
     QPointF const pos
-        = detail::read_required_point_or_throw(nodeJson, "position",
+        = detail::read_required_point_or_throw(nodeJson,
+                                               "position",
                                                "Invalid node position in serialized node");
 
     std::unique_ptr<NodeDelegateModel> model = _registry->create(delegateModelName);
@@ -707,7 +822,7 @@ void DataFlowGraphModel::load(QJsonObject const &jsonDocument)
         }
 
         for (ConnectionId const connId : parsedConnections) {
-            if (!connectionPossible(connId)) {
+            if (!connectionPossible(connId, {})) {
                 throw std::logic_error("Serialized graph contains invalid connection");
             }
 

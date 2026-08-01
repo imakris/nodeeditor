@@ -18,7 +18,6 @@
 
 #include <cstdlib>
 #include <optional>
-#include <vector>
 
 namespace QtNodes {
 
@@ -284,24 +283,6 @@ void NodeGraphicsObject::mousePressEvent(QGraphicsSceneMouseEvent *event)
             }
         } else // initialize new Connection
         {
-            if (portToCheck == PortType::Out) {
-                auto const outPolicy = _graphModel
-                                           .portData(_nodeId,
-                                                     portToCheck,
-                                                     portIndex,
-                                                     PortRole::ConnectionPolicy)
-                                           .value<ConnectionPolicy>();
-
-                if (!connected.empty() && outPolicy == ConnectionPolicy::One) {
-                    // Snapshot first: deleteConnection mutates (and can destroy) the
-                    // very set `connected` aliases inside the connection index.
-                    std::vector<ConnectionId> toDelete(connected.begin(), connected.end());
-                    for (auto const &cnId : toDelete) {
-                        _graphModel.deleteConnection(cnId);
-                    }
-                }
-            } // if port == out
-
             ConnectionId const incompleteConnectionId = makeIncompleteConnectionId(_nodeId,
                                                                                    portToCheck,
                                                                                    portIndex);
