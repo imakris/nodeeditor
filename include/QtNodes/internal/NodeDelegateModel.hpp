@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
 
 #include <QMetaType>
 #include <QImage>
@@ -60,6 +59,14 @@ enum class NodeProcessingStatus : int {
  * the nesting DataFlowGraphModel which is a subclass of
  * AbstractGraphModel.
  * This class is the same what has been called NodeDataModel before v3.
+ *
+ * Thread affinity: a delegate model is GUI-thread state. Every member must be
+ * called from the thread the model lives in, which is the thread that owns the
+ * scene. The status icons are QPixmap/QIcon values and their rasterization runs
+ * through QPainter, none of which may be touched outside the GUI thread, so no
+ * amount of locking can make this class callable from a worker. A worker that
+ * has to publish a status, a validation state or a style must marshal the call,
+ * for example with a queued signal or vnm::qt::post().
  */
 class NODE_EDITOR_PUBLIC NodeDelegateModel
     : public QObject
@@ -143,7 +150,7 @@ public:
 
     bool frozen() const { return _frozen; }
 
-    void setFrozenState(bool state) { _frozen = state; }
+    void setFrozenState(bool state);
 
 public Q_SLOTS:
     virtual void inputConnectionCreated(ConnectionId const &) {}
@@ -209,7 +216,6 @@ private:
     mutable int _cachedProcessingStatusResolution{0};
     mutable qreal _cachedProcessingStatusDpr{0.0};
     mutable QImage _cachedProcessingStatusImage;
-    mutable std::mutex _processingStatusIconMutex;
 };
 
 } // namespace QtNodes

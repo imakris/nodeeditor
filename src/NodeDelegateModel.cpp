@@ -3,6 +3,8 @@
 #include "NodeRenderingUtils.hpp"
 #include "StyleCollection.hpp"
 
+#include <QtCore/QThread>
+
 namespace QtNodes {
 
 namespace {
@@ -53,7 +55,16 @@ void NodeDelegateModel::load(QJsonObject const &)
 
 void NodeDelegateModel::setValidationState(const NodeValidationState &validationState)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
+
     _nodeValidationState = validationState;
+}
+
+void NodeDelegateModel::setFrozenState(bool state)
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    _frozen = state;
 }
 
 ConnectionPolicy NodeDelegateModel::portConnectionPolicy(PortType portType, PortIndex) const
@@ -80,14 +91,16 @@ NodeStyle const &NodeDelegateModel::nodeStyle() const
 
 void NodeDelegateModel::setNodeStyle(NodeStyle const &style)
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    Q_ASSERT(thread() == QThread::currentThread());
+
     _nodeStyle = style;
     _processingStatusIconDirty = true;
 }
 
 QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    // render_icon_image() drives QPainter and QIcon::paint(), which are GUI-thread only.
+    Q_ASSERT(thread() == QThread::currentThread());
 
     int const resolution = _nodeStyle.processingIconStyle._resolution;
 
@@ -116,13 +129,13 @@ QImage NodeDelegateModel::processingStatusImage(qreal dpr) const
 
 ProcessingIconStyle NodeDelegateModel::processingIconStyle() const
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
     return _nodeStyle.processingIconStyle;
 }
 
 void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap &pixmap)
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    // QPixmap may not be used outside the GUI thread.
+    Q_ASSERT(thread() == QThread::currentThread());
 
     switch (status) {
     case NodeProcessingStatus::NoStatus:
@@ -152,20 +165,24 @@ void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap
 
 void NodeDelegateModel::setStatusIconStyle(const ProcessingIconStyle &style)
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    Q_ASSERT(thread() == QThread::currentThread());
+
     _nodeStyle.processingIconStyle = style;
     _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setNodeProcessingStatus(NodeProcessingStatus status)
 {
-    std::lock_guard<std::mutex> lock(_processingStatusIconMutex);
+    Q_ASSERT(thread() == QThread::currentThread());
+
     _processingStatus = status;
     _processingStatusIconDirty = true;
 }
 
 void NodeDelegateModel::setBackgroundColor(QColor const &color)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
+
     _nodeStyle.setBackgroundColor(color);
 }
 

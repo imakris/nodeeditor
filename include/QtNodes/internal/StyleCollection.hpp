@@ -8,6 +8,15 @@
 
 namespace QtNodes {
 
+/**
+ * Holds the process-wide default styles that every scene, view, geometry and
+ * painter falls back to.
+ *
+ * Thread affinity: these are GUI-thread state. The getters hand out references
+ * into the singleton and the setters overwrite it in place, so a concurrent
+ * reader would observe a torn style. Install the defaults from the GUI thread,
+ * normally during application start-up, before or between paints.
+ */
 class NODE_EDITOR_PUBLIC StyleCollection
 {
 public:
