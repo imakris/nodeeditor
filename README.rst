@@ -1,17 +1,9 @@
 QtNodes
 #######
 
-.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml
-   :alt: CI Linux
-
-.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml
-   :alt: CI macOS
-
-.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml
-   :alt: CI Windows
+.. image:: https://github.com/imakris/nodeeditor/actions/workflows/ci.yml/badge.svg?branch=master
+   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci.yml
+   :alt: CI
 
 Introduction
 ============
@@ -70,18 +62,9 @@ Supported Environments
 Platforms
 ---------
 
-* Linux (x64, gcc, Qt 6.5+) |LinuxStatus|
-* OSX (Apple Clang, Qt 6.7.1) |MacOSStatus|
-* Windows (MSVC, Qt 6.5+) |WindowsStatus|
-
-.. |LinuxStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-linux.yml
-
-.. |MacOSStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-macos.yml
-
-.. |WindowsStatus| image:: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml/badge.svg?branch=master
-   :target: https://github.com/imakris/nodeeditor/actions/workflows/ci-windows.yml
+* Linux (x64, gcc, Qt 6.5+)
+* OSX (Apple Clang, Qt 6.7.1)
+* Windows (MSVC, Qt 6.5+)
 
 
 Dependencies

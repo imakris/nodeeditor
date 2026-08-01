@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "*"
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # The job names are the status check contexts branch protection matches on.
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu / Qt 6.5.3
+            os: ubuntu-22.04
+            qt_version: "6.5.3"
+          - name: macOS / Qt 6.7.1
+            os: macos-14
+            qt_version: "6.7.1"
+          - name: Windows / Qt 6.5.3
+            os: windows-2022
+            qt_version: "6.5.3"
+          - name: Windows / Qt 6.7.1
+            os: windows-2022
+            qt_version: "6.7.1"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt_version }}
+
+      - name: Setup
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev xvfb
+
+      - name: Setup VS tools
+        if: runner.os == 'Windows'
+        uses: egor-tensin/vs-shell@v2
+        with:
+          arch: x64
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_DOCS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run tests
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ctest --test-dir build --output-on-failure --progress
+
+      - name: Run tests
+        if: runner.os == 'macOS'
+        run: ctest --test-dir build --output-on-failure --progress
+
+      - name: Run tests
+        if: runner.os == 'Windows'
+        run: ctest --test-dir build -C Release --output-on-failure --progress
