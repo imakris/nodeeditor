@@ -2,9 +2,10 @@
 
 #include "AbstractGraphModel.hpp"
 #include "ConnectionIdUtils.hpp"
-#include "StyleCollection.hpp"
+#include "NodeRenderingUtils.hpp"
 
 #include <cmath>
+#include <optional>
 
 namespace QtNodes {
 
@@ -28,12 +29,16 @@ PortIndex AbstractNodeGeometry::checkPortHit(NodeId const nodeId,
                                              PortType const portType,
                                              QPointF const nodePoint) const
 {
-    auto const &nodeStyle = StyleCollection::nodeStyle();
-
     PortIndex result = InvalidPortIndex;
 
     if (portType == PortType::None)
         return result;
+
+    // The clickable region must follow the same style the painter sizes the
+    // port circles from, otherwise a node carrying its own style draws its
+    // ports in one place and accepts clicks in another.
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &nodeStyle = node_rendering::resolved_node_style(_graphModel, nodeId, fallback_style);
 
     double const tolerance = 2.0 * nodeStyle.ConnectionPointDiameter;
 
