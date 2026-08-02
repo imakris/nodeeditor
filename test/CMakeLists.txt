@@ -50,6 +50,17 @@ add_test(
 # hanging the whole gate.
 set_tests_properties(test_nodes PROPERTIES TIMEOUT 300)
 
+if(WIN32)
+  # Windows has no RPATH and the Qt runtime does not sit next to the test binary,
+  # so launching with the wrong PATH does not fail: the loader stops on the
+  # missing-DLL hard error, which produces a test that emits nothing and then
+  # trips its budget. That reads as a hung suite and has already been reported as
+  # one. Point the test at the Qt this tree was configured against so the
+  # environment cannot fake a product defect. Needs CMake 3.22 for the property.
+  set_tests_properties(test_nodes PROPERTIES
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<SHELL_PATH:$<TARGET_FILE_DIR:Qt6::Core>>")
+endif()
+
 set(qt_nodes_installed_consumer_arguments
   "-DQT_NODES_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
   "-DQT_NODES_TOP_BINARY_DIR=${PROJECT_BINARY_DIR}"
