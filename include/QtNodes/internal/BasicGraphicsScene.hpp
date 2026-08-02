@@ -253,6 +253,11 @@ private:
      */
     void traverseGraphAndPopulateGraphicsObjects();
     void addNodeGraphicsObject(NodeId const nodeId);
+
+    /// Re-applies the process-wide defaults to the graphics objects of this
+    /// scene after a new style was installed.
+    void applyStyleDefaults();
+
     void syncNodePositions();
     void syncNodePosition(NodeGraphicsObject &node);
     bool isCorrectingNodePosition(NodeId const nodeId) const;

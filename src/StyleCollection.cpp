@@ -1,5 +1,7 @@
 #include "StyleCollection.hpp"
 
+#include "StyleNotifier.hpp"
+
 #include <QtCore/QCoreApplication>
 #include <QtCore/QThread>
 
@@ -7,6 +9,7 @@ using QtNodes::ConnectionStyle;
 using QtNodes::GraphicsViewStyle;
 using QtNodes::NodeStyle;
 using QtNodes::StyleCollection;
+using QtNodes::StyleNotifier;
 
 namespace {
 
@@ -47,6 +50,8 @@ void StyleCollection::setNodeStyle(NodeStyle nodeStyle)
     assert_gui_thread();
 
     instance()._nodeStyle = nodeStyle;
+
+    StyleNotifier::notifyDefaultsChanged();
 }
 
 void StyleCollection::setConnectionStyle(ConnectionStyle connectionStyle)
@@ -54,6 +59,8 @@ void StyleCollection::setConnectionStyle(ConnectionStyle connectionStyle)
     assert_gui_thread();
 
     instance()._connectionStyle = connectionStyle;
+
+    StyleNotifier::notifyDefaultsChanged();
 }
 
 void StyleCollection::setGraphicsViewStyle(GraphicsViewStyle flowViewStyle)
@@ -61,6 +68,8 @@ void StyleCollection::setGraphicsViewStyle(GraphicsViewStyle flowViewStyle)
     assert_gui_thread();
 
     instance()._flowViewStyle = flowViewStyle;
+
+    StyleNotifier::notifyDefaultsChanged();
 }
 
 StyleCollection &StyleCollection::instance()

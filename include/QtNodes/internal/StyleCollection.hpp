@@ -12,6 +12,10 @@ namespace QtNodes {
  * Holds the process-wide default styles that every scene, view, geometry and
  * painter falls back to.
  *
+ * Installing a default reaches the objects that already exist: each setter
+ * notifies the scenes and views, which re-resolve their style, re-apply the
+ * parts they hold as item state, and drop what they had cached.
+ *
  * Thread affinity: these are GUI-thread state. The getters hand out references
  * into the singleton and the setters overwrite it in place, so a concurrent
  * reader would observe a torn style. Install the defaults from the GUI thread,

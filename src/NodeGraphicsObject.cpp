@@ -81,12 +81,7 @@ NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
 
     setCacheMode(initial_cache_mode(scene));
 
-    std::optional<NodeStyle> fallback_style;
-    NodeStyle const &nodeStyle = node_rendering::resolved_node_style(_graphModel,
-                                                                     _nodeId,
-                                                                     fallback_style);
-
-    setOpacity(nodeStyle.Opacity);
+    applyNodeStyle();
 
     setAcceptHoverEvents(true);
 
@@ -186,6 +181,33 @@ QRectF NodeGraphicsObject::boundingRect() const
 void NodeGraphicsObject::setGeometryChanged()
 {
     prepareGeometryChange();
+}
+
+void NodeGraphicsObject::applyNodeStyle()
+{
+    // The bounding rect grows by the shadow margins the style asks for, so the
+    // scene has to re-read it and repaint what the node painted before.
+    prepareGeometryChange();
+
+    std::optional<NodeStyle> fallback_style;
+    NodeStyle const &nodeStyle = node_rendering::resolved_node_style(_graphModel,
+                                                                     _nodeId,
+                                                                     fallback_style);
+
+    setOpacity(nodeStyle.Opacity);
+
+    // Every other field of the style is read by the painter, and the node draws
+    // from a cached pixmap until it is invalidated.
+    //
+    // One field is not fully carried by this: the geometries widen the node for
+    // a non-null style.titleIcon, and that width is stored as NodeRole::Size
+    // rather than resolved per paint, so an install that introduces a title icon
+    // draws the wider icon inside the old width. Recomputing the size here is
+    // not a local fix. It writes model data, so it can re-enter through
+    // onNodeUpdated, and the same staleness already exists for
+    // NodeDelegateModel::setNodeStyle and for setNodeData(NodeRole::Style). All
+    // three want one "the node's style changed" entry point instead.
+    update();
 }
 
 void NodeGraphicsObject::setNodeGroup(std::shared_ptr<NodeGroup> group)

@@ -104,6 +104,7 @@ set(CPP_SOURCE_FILES
   src/NodeState.cpp
   src/NodeStyle.cpp
   src/StyleCollection.cpp
+  src/StyleNotifier.cpp
   src/SerializationValidation.cpp
   src/UndoCommands.cpp
   src/locateNode.cpp

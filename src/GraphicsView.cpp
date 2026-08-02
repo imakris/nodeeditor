@@ -8,6 +8,7 @@
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
 #include "StyleCollection.hpp"
+#include "StyleNotifier.hpp"
 #include "UndoCommands.hpp"
 
 #include <QtWidgets/QGraphicsScene>
@@ -161,9 +162,7 @@ GraphicsView::GraphicsView(QWidget *parent)
     setDragMode(QGraphicsView::ScrollHandDrag);
     setRenderHint(QPainter::Antialiasing);
 
-    auto const &flowViewStyle = StyleCollection::flowViewStyle();
-
-    setBackgroundBrush(flowViewStyle.BackgroundColor);
+    applyStyleDefaults();
 
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -181,6 +180,11 @@ GraphicsView::GraphicsView(QWidget *parent)
     setSceneRect(-maxSize, -maxSize, (maxSize * 2), (maxSize * 2));
 
     applyRasterizationPolicy();
+
+    connect(&StyleNotifier::instance(),
+            &StyleNotifier::defaultsChanged,
+            this,
+            &GraphicsView::applyStyleDefaults);
 }
 
 GraphicsView::GraphicsView(BasicGraphicsScene *scene, QWidget *parent)
@@ -921,6 +925,14 @@ void GraphicsView::zoomFitSelected()
 
         fitInView(unitedBoundingRect, Qt::KeepAspectRatio);
     }
+}
+
+void GraphicsView::applyStyleDefaults()
+{
+    setBackgroundBrush(StyleCollection::flowViewStyle().BackgroundColor);
+
+    resetCachedContent();
+    viewport()->update();
 }
 
 void GraphicsView::applyRasterizationPolicy()

@@ -68,6 +68,15 @@ public:
     /// Updates the position of both ends
     void move();
 
+    /**
+     * Drops what the item caches from the connection style.
+     *
+     * The cached bounding rect is padded from the style's point diameter, so a
+     * newly installed default changes the item's extent and not only its
+     * colours. Called whenever a new default style is installed.
+     */
+    void applyConnectionStyle();
+
     ConnectionState const &connectionState() const;
 
     ConnectionState &connectionState();

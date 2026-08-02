@@ -232,6 +232,14 @@ void ConnectionGraphicsObject::move()
     update();
 }
 
+void ConnectionGraphicsObject::applyConnectionStyle()
+{
+    prepareGeometryChange();
+    _geometryDirty = true;
+
+    update();
+}
+
 ConnectionState const &ConnectionGraphicsObject::connectionState() const
 {
     return _connectionState;

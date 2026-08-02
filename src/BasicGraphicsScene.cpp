@@ -11,6 +11,7 @@
 #include "GraphicsView.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "StyleNotifier.hpp"
 #include "selection_utils.hpp"
 
 #include <vnm_qt_dispatch/vnm_qt_dispatch.h>
@@ -72,6 +73,11 @@ BasicGraphicsScene::BasicGraphicsScene(AbstractGraphModel &graphModel, QObject *
     connect(this, &BasicGraphicsScene::nodeClicked, this, &BasicGraphicsScene::onNodeClicked);
 
     connect(&_graphModel, &AbstractGraphModel::modelReset, this, &BasicGraphicsScene::onModelReset);
+
+    connect(&StyleNotifier::instance(),
+            &StyleNotifier::defaultsChanged,
+            this,
+            &BasicGraphicsScene::applyStyleDefaults);
 
     traverseGraphAndPopulateGraphicsObjects();
 
@@ -280,6 +286,31 @@ void BasicGraphicsScene::addNodeGraphicsObject(NodeId const nodeId)
 
     syncNodePosition(*nodePtr);
     nodePtr->updateValidationTooltip();
+}
+
+void BasicGraphicsScene::applyStyleDefaults()
+{
+    for (auto &nodeEntry : _nodeGraphicsObjects) {
+        nodeEntry.second->applyNodeStyle();
+    }
+
+    for (auto &connectionEntry : _connectionGraphicsObjects) {
+        connectionEntry.second->applyConnectionStyle();
+    }
+
+    if (_draftConnection) {
+        _draftConnection->applyConnectionStyle();
+    }
+
+    // A group frame paints its border and fill from its own constants, but the
+    // rect it paints them into is stored rather than recomputed per paint, and
+    // that rect is the union of its member nodes' bounding rects, which grow and
+    // shrink with the installed style's shadow margins. Nothing else recomputes
+    // it on an install, so the frame would keep the extent of the previous
+    // default.
+    for (auto &groupEntry : _groups) {
+        groupEntry.second->groupGraphicsObject().updateGroupGeometry();
+    }
 }
 
 void BasicGraphicsScene::syncNodePositions()

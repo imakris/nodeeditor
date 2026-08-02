@@ -149,6 +149,12 @@ private:
     void stopZoomTimer();
     void applyRasterizationPolicy();
 
+    /// Re-reads the process-wide view style. The background colour is held as
+    /// the view's brush and the drawn background is cached, so neither follows a
+    /// newly installed default on its own. Called at construction and whenever a
+    /// new default style is installed.
+    void applyStyleDefaults();
+
     double _zoomVelocity = 0.0;
     QPointF _zoomPivot;
     int _zoomTimerId = 0;

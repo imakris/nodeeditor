@@ -52,6 +52,19 @@ public:
 
     void setGeometryChanged();
 
+    /**
+     * Re-resolves the node's style and applies the parts the item holds itself.
+     *
+     * Opacity is item state rather than something the painter reads per paint,
+     * so it has to be re-applied whenever the resolved style can have changed.
+     * The item is also invalidated, because its bounding rect follows the
+     * style's shadow margins and, under the Crisp rasterization policy, it
+     * renders from a device-coordinate cache that would otherwise serve the
+     * pixmap it painted from the previous style.
+     * Called at construction and whenever a new default style is installed.
+     */
+    void applyNodeStyle();
+
     void updateValidationTooltip();
 
     /// Visits all attached connections and corrects
