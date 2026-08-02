@@ -15,7 +15,8 @@ namespace QtNodes {
  * Thread affinity: these are GUI-thread state. The getters hand out references
  * into the singleton and the setters overwrite it in place, so a concurrent
  * reader would observe a torn style. Install the defaults from the GUI thread,
- * normally during application start-up, before or between paints.
+ * normally during application start-up, before or between paints. The setters
+ * assert that affinity once an application object exists.
  */
 class NODE_EDITOR_PUBLIC StyleCollection
 {
