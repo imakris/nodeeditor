@@ -47,6 +47,7 @@ using QtNodes::CreateCommand;
 using QtNodes::DataFlowGraphicsScene;
 using QtNodes::DataFlowGraphModel;
 using QtNodes::GraphicsView;
+using QtNodes::GroupId;
 using QtNodes::InvalidNodeId;
 using QtNodes::NodeData;
 using QtNodes::NodeDataType;
@@ -84,6 +85,8 @@ static_assert(!std::is_nothrow_constructible_v<ThrowingMoveTransaction,
 class UndoDocumentNodeModel : public NodeDelegateModel
 {
 public:
+    UndoDocumentNodeModel() { ++s_construction_count; }
+
     QString name() const override { return QStringLiteral("UndoDocumentNodeModel"); }
     QString caption() const override { return QStringLiteral("Undo document node"); }
 
@@ -97,6 +100,12 @@ public:
     std::shared_ptr<NodeData> outData(PortIndex) override { return nullptr; }
     void setInData(std::shared_ptr<NodeData>, PortIndex) override {}
     QWidget *embeddedWidget() override { return nullptr; }
+
+    static void reset_construction_count() { s_construction_count = 0; }
+    static int construction_count() { return s_construction_count; }
+
+private:
+    static inline int s_construction_count = 0;
 };
 
 class ReplacementData : public NodeData
@@ -406,6 +415,40 @@ QJsonObject make_scene_document(std::shared_ptr<NodeDelegateModelRegistry> const
     return sceneJson;
 }
 
+QJsonObject make_disjoint_groups_document(
+    std::shared_ptr<NodeDelegateModelRegistry> const &registry)
+{
+    DataFlowGraphModel source_model(registry);
+
+    NodeId const first_id = source_model.addNode(QStringLiteral("UndoDocumentNodeModel"));
+    NodeId const second_id = source_model.addNode(QStringLiteral("UndoDocumentNodeModel"));
+    NodeId const third_id = source_model.addNode(QStringLiteral("UndoDocumentNodeModel"));
+    REQUIRE(first_id != InvalidNodeId);
+    REQUIRE(second_id != InvalidNodeId);
+    REQUIRE(third_id != InvalidNodeId);
+
+    source_model.setNodeData(first_id, NodeRole::Position, QPointF(20.0, 30.0));
+    source_model.setNodeData(second_id, NodeRole::Position, QPointF(220.0, 130.0));
+    source_model.setNodeData(third_id, NodeRole::Position, QPointF(420.0, 230.0));
+
+    QJsonObject first_group;
+    first_group["id"] = 17;
+    first_group["name"] = QStringLiteral("First loaded group");
+    first_group["locked"] = false;
+    first_group["nodes"] = QJsonArray{static_cast<qint64>(first_id),
+                                       static_cast<qint64>(second_id)};
+
+    QJsonObject second_group;
+    second_group["id"] = 29;
+    second_group["name"] = QStringLiteral("Second loaded group");
+    second_group["locked"] = true;
+    second_group["nodes"] = QJsonArray{static_cast<qint64>(third_id)};
+
+    QJsonObject scene_json = source_model.save();
+    scene_json["groups"] = QJsonArray{first_group, second_group};
+    return scene_json;
+}
+
 bool load_scene_document(DataFlowGraphicsScene &scene, QJsonObject const &sceneJson)
 {
     QTemporaryFile file(QDir::tempPath() + QStringLiteral("/qt-nodes-undo-XXXXXX.flow"));
@@ -428,6 +471,37 @@ bool load_scene_document(DataFlowGraphicsScene &scene, QJsonObject const &sceneJ
     bool const loaded = scene.load();
     REQUIRE(selectedFile);
     return loaded;
+}
+
+QJsonObject save_scene_document(DataFlowGraphicsScene const &scene)
+{
+    QTemporaryFile file(QDir::tempPath() + QStringLiteral("/qt-nodes-undo-XXXXXX.flow"));
+    REQUIRE(file.open());
+    QString const file_name = file.fileName();
+    file.close();
+    REQUIRE(file.remove());
+
+    bool selected_file = false;
+    QTimer::singleShot(0, &scene, [&selected_file, file_name] {
+        auto *dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+        if (dialog) {
+            selected_file = true;
+            dialog->setDirectory(QFileInfo(file_name).absolutePath());
+            dialog->selectFile(file_name);
+            static_cast<QDialog *>(dialog)->accept();
+        }
+    });
+
+    REQUIRE(scene.save());
+    REQUIRE(selected_file);
+
+    QFile saved_file(file_name);
+    REQUIRE(saved_file.open(QIODevice::ReadOnly));
+    QJsonParseError parse_error{};
+    QJsonDocument const document = QJsonDocument::fromJson(saved_file.readAll(), &parse_error);
+    REQUIRE(parse_error.error == QJsonParseError::NoError);
+    REQUIRE(document.isObject());
+    return document.object();
 }
 
 void check_loaded_document(DataFlowGraphModel const &model,
@@ -648,6 +722,172 @@ TEST_CASE("Rejected document load preserves graph and history", "[undo][serializ
     CHECK(model.allNodeIds().empty());
     CHECK_FALSE(undoStack.canUndo());
     CHECK(undoStack.isClean());
+}
+
+TEST_CASE("Full document group membership is unique and atomic", "[undo][serialization][node-group]")
+{
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    auto app = applicationSetup();
+    auto registry = create_undo_document_registry();
+    DataFlowGraphModel model(registry);
+    DataFlowGraphicsScene scene(model);
+    auto &undo_stack = scene.undoStack();
+
+    undo_stack.push(
+        new CreateCommand(&scene, QStringLiteral("UndoDocumentNodeModel"), QPointF(5.0, 10.0)));
+    undo_stack.push(
+        new CreateCommand(&scene, QStringLiteral("UndoDocumentNodeModel"), QPointF(105.0, 110.0)));
+    REQUIRE(model.nodeExists(0U));
+    REQUIRE(model.nodeExists(1U));
+
+    auto *first_node_object = scene.nodeGraphicsObject(0U);
+    auto *second_node_object = scene.nodeGraphicsObject(1U);
+    REQUIRE(first_node_object != nullptr);
+    REQUIRE(second_node_object != nullptr);
+
+    std::vector<QtNodes::NodeGraphicsObject *> current_group_nodes{first_node_object,
+                                                                   second_node_object};
+    GroupId const current_group_id = 41U;
+    auto current_group = scene
+                             .createGroup(current_group_nodes,
+                                          QStringLiteral("Current group"),
+                                          current_group_id)
+                             .lock();
+    REQUIRE(current_group);
+    current_group->groupGraphicsObject().lock(false);
+
+    QJsonObject const graph_before_rejection = model.save();
+    int const history_count_before_rejection = undo_stack.count();
+    int const history_index_before_rejection = undo_stack.index();
+    bool const history_clean_before_rejection = undo_stack.isClean();
+
+    int model_mutation_count = 0;
+    int modified_count = 0;
+    int scene_loaded_count = 0;
+    QObject::connect(&model, &DataFlowGraphModel::nodeCreated, [&] { ++model_mutation_count; });
+    QObject::connect(&model, &DataFlowGraphModel::nodeDeleted, [&] { ++model_mutation_count; });
+    QObject::connect(&model, &DataFlowGraphModel::nodeUpdated, [&] { ++model_mutation_count; });
+    QObject::connect(&model,
+                     &DataFlowGraphModel::nodePositionUpdated,
+                     [&] { ++model_mutation_count; });
+    QObject::connect(&model, &DataFlowGraphModel::modelReset, [&] { ++model_mutation_count; });
+    QObject::connect(&scene, &BasicGraphicsScene::modified, [&](BasicGraphicsScene *) {
+        ++modified_count;
+    });
+    QObject::connect(&scene, &DataFlowGraphicsScene::sceneLoaded, [&] { ++scene_loaded_count; });
+
+    QJsonObject rejected_document = make_scene_document(registry, false);
+    QJsonArray groups = rejected_document["groups"].toArray();
+    QJsonObject first_group = groups.first().toObject();
+    QJsonArray first_group_nodes = first_group["nodes"].toArray();
+
+    SECTION("A node repeated within one group is rejected")
+    {
+        first_group_nodes.append(first_group_nodes.first());
+        first_group["nodes"] = first_group_nodes;
+        groups.replace(0, first_group);
+    }
+
+    SECTION("A node repeated across groups is rejected")
+    {
+        QJsonObject second_group;
+        second_group["id"] = 29;
+        second_group["name"] = QStringLiteral("Overlapping group");
+        second_group["locked"] = true;
+        second_group["nodes"] = QJsonArray{first_group_nodes.first()};
+        groups.append(second_group);
+    }
+
+    rejected_document["groups"] = groups;
+
+    UndoDocumentNodeModel::reset_construction_count();
+    bool const loaded = load_scene_document(scene, rejected_document);
+    CHECK_FALSE(loaded);
+    CHECK(UndoDocumentNodeModel::construction_count() == 0);
+    if (loaded) {
+        return;
+    }
+
+    CHECK(model_mutation_count == 0);
+    CHECK(modified_count == 0);
+    CHECK(scene_loaded_count == 0);
+    CHECK(model.save() == graph_before_rejection);
+    CHECK(scene.nodeGraphicsObject(0U) == first_node_object);
+    CHECK(scene.nodeGraphicsObject(1U) == second_node_object);
+    REQUIRE(scene.groups().size() == 1);
+    REQUIRE(scene.groups().count(current_group_id) == 1);
+    CHECK(scene.groups().at(current_group_id).get() == current_group.get());
+    CHECK(current_group->name() == QStringLiteral("Current group"));
+    CHECK_FALSE(current_group->groupGraphicsObject().locked());
+    CHECK(current_group->nodeIDs() == std::vector<NodeId>{0U, 1U});
+    CHECK(undo_stack.count() == history_count_before_rejection);
+    CHECK(undo_stack.index() == history_index_before_rejection);
+    CHECK(undo_stack.isClean() == history_clean_before_rejection);
+    CHECK(undo_stack.canUndo());
+
+    QJsonObject const saved_document = save_scene_document(scene);
+    REQUIRE(saved_document["groups"].isArray());
+    QJsonArray const saved_groups = saved_document["groups"].toArray();
+    REQUIRE(saved_groups.size() == 1);
+    QJsonObject const saved_group = saved_groups.first().toObject();
+    CHECK(saved_group["id"].toInteger() == static_cast<qint64>(current_group_id));
+    CHECK(saved_group["name"].toString() == QStringLiteral("Current group"));
+    CHECK_FALSE(saved_group["locked"].toBool());
+    CHECK(saved_group["nodes"].toArray() == QJsonArray{0, 1});
+    CHECK(model_mutation_count == 0);
+    CHECK(modified_count == 0);
+    CHECK(scene_loaded_count == 0);
+}
+
+TEST_CASE("Full document load preserves disjoint group state", "[serialization][node-group]")
+{
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    auto app = applicationSetup();
+    auto registry = create_undo_document_registry();
+    DataFlowGraphModel model(registry);
+    DataFlowGraphicsScene scene(model);
+
+    REQUIRE(load_scene_document(scene, make_disjoint_groups_document(registry)));
+    REQUIRE(scene.groups().size() == 2);
+
+    auto const first_group = scene.groups().at(17U);
+    auto const second_group = scene.groups().at(29U);
+    REQUIRE(first_group);
+    REQUIRE(second_group);
+    CHECK(first_group->id() == 17U);
+    CHECK(first_group->name() == QStringLiteral("First loaded group"));
+    CHECK_FALSE(first_group->groupGraphicsObject().locked());
+    CHECK(first_group->nodeIDs() == std::vector<NodeId>{0U, 1U});
+    CHECK(second_group->id() == 29U);
+    CHECK(second_group->name() == QStringLiteral("Second loaded group"));
+    CHECK(second_group->groupGraphicsObject().locked());
+    CHECK(second_group->nodeIDs() == std::vector<NodeId>{2U});
+
+    REQUIRE(scene.nodeGraphicsObject(0U));
+    REQUIRE(scene.nodeGraphicsObject(1U));
+    REQUIRE(scene.nodeGraphicsObject(2U));
+    CHECK(scene.nodeGraphicsObject(0U)->nodeGroup().lock() == first_group);
+    CHECK(scene.nodeGraphicsObject(1U)->nodeGroup().lock() == first_group);
+    CHECK(scene.nodeGraphicsObject(2U)->nodeGroup().lock() == second_group);
+
+    QJsonObject const saved_document = save_scene_document(scene);
+    QJsonArray const saved_groups = saved_document["groups"].toArray();
+    REQUIRE(saved_groups.size() == 2);
+    for (QJsonValue const group_value : saved_groups) {
+        QJsonObject const group = group_value.toObject();
+        GroupId const group_id = static_cast<GroupId>(group["id"].toInteger());
+        if (group_id == 17U) {
+            CHECK(group["name"].toString() == QStringLiteral("First loaded group"));
+            CHECK_FALSE(group["locked"].toBool());
+            CHECK(group["nodes"].toArray() == QJsonArray{0, 1});
+        }
+        else {
+            REQUIRE(group_id == 29U);
+            CHECK(group["name"].toString() == QStringLiteral("Second loaded group"));
+            CHECK(group["locked"].toBool());
+            CHECK(group["nodes"].toArray() == QJsonArray{2});
+        }
+    }
 }
 
 TEST_CASE("Orientation rebuild preserves document history", "[undo][graphics]")

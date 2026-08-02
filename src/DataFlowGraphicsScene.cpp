@@ -80,6 +80,8 @@ void validate_groups_json(QJsonObject const &sceneJson)
 
     std::unordered_set<NodeId> const nodeIds = collect_node_ids(nodesJsonArray);
     std::unordered_set<GroupId> seenGroupIds;
+    std::unordered_set<NodeId> grouped_node_ids;
+    grouped_node_ids.reserve(nodeIds.size());
 
     for (QJsonValue const &groupValue : groupsJsonArray) {
         if (!groupValue.isObject()) {
@@ -118,6 +120,10 @@ void validate_groups_json(QJsonObject const &sceneJson)
             NodeId nodeId = InvalidNodeId;
             if (!QtNodes::detail::read_node_id(idValue, nodeId) || nodeIds.count(nodeId) == 0) {
                 throw std::logic_error("Serialized scene group references unknown node id");
+            }
+
+            if (!grouped_node_ids.insert(nodeId).second) {
+                throw std::logic_error("Serialized scene contains duplicate group membership");
             }
         }
     }
