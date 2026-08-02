@@ -3,12 +3,20 @@
 
 #include <catch2/catch.hpp>
 
+#include <QJsonObject>
+#include <QStringList>
+
 #include <limits>
+#include <vector>
 
 using QtNodes::ConnectionId;
+using QtNodes::InvalidNodeId;
+using QtNodes::InvalidPortIndex;
+using QtNodes::invertConnection;
 using QtNodes::NodeId;
 using QtNodes::PortIndex;
-using QtNodes::invertConnection;
+using QtNodes::toJson;
+using QtNodes::tryFromJson;
 
 TEST_CASE("ConnectionId basic functionality", "[core]")
 {
@@ -65,5 +73,87 @@ TEST_CASE("ConnectionId edge cases", "[core]")
         CHECK(conn.outPortIndex == std::numeric_limits<PortIndex>::max());
         CHECK(conn.inNodeId == std::numeric_limits<NodeId>::max() - 1);
         CHECK(conn.inPortIndex == std::numeric_limits<PortIndex>::max() - 1);
+    }
+}
+
+TEST_CASE("ConnectionId JSON parsing is fallible", "[core][serialization]")
+{
+    ConnectionId const expected{1, 2, 3, 4};
+    QJsonObject const validJson = toJson(expected);
+
+    SECTION("toJson preserves the wire schema and round-trips")
+    {
+        CHECK(validJson.size() == 4);
+        CHECK(validJson["outNodeId"] == 1);
+        CHECK(validJson["outPortIndex"] == 2);
+        CHECK(validJson["inNodeId"] == 3);
+        CHECK(validJson["inPortIndex"] == 4);
+
+        ConnectionId parsed{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
+        REQUIRE(tryFromJson(validJson, parsed));
+        CHECK(parsed == expected);
+    }
+
+    SECTION("The final non-sentinel values round-trip")
+    {
+        ConnectionId const boundary{InvalidNodeId - 1,
+                                    InvalidPortIndex - 1,
+                                    InvalidNodeId - 1,
+                                    InvalidPortIndex - 1};
+        ConnectionId parsed{};
+        REQUIRE(tryFromJson(toJson(boundary), parsed));
+        CHECK(parsed == boundary);
+    }
+
+    SECTION("Every endpoint field is required and integer-typed")
+    {
+        QStringList const keys{
+            "outNodeId",
+            "outPortIndex",
+            "inNodeId",
+            "inPortIndex",
+        };
+
+        for (QString const &key : keys) {
+            QJsonObject malformed = validJson;
+            malformed[key] = "1";
+
+            ConnectionId parsed{9, 8, 7, 6};
+            INFO(key.toStdString());
+            CHECK_FALSE(tryFromJson(malformed, parsed));
+            CHECK(parsed == ConnectionId{9, 8, 7, 6});
+
+            malformed = validJson;
+            malformed.remove(key);
+            CHECK_FALSE(tryFromJson(malformed, parsed));
+            CHECK(parsed == ConnectionId{9, 8, 7, 6});
+        }
+    }
+
+    SECTION("Out-of-range and sentinel endpoint values are rejected")
+    {
+        std::vector<double> const invalidValues{
+            -1.0,
+            1.5,
+            static_cast<double>(InvalidNodeId),
+            static_cast<double>(InvalidNodeId) + 1.0,
+        };
+
+        for (double const value : invalidValues) {
+            QJsonObject malformed = validJson;
+            malformed["outNodeId"] = value;
+
+            ConnectionId parsed{9, 8, 7, 6};
+            INFO(value);
+            CHECK_FALSE(tryFromJson(malformed, parsed));
+            CHECK(parsed == ConnectionId{9, 8, 7, 6});
+        }
+
+        QJsonObject malformed = validJson;
+        malformed["outPortIndex"] = static_cast<double>(InvalidPortIndex);
+
+        ConnectionId parsed{9, 8, 7, 6};
+        CHECK_FALSE(tryFromJson(malformed, parsed));
+        CHECK(parsed == ConnectionId{9, 8, 7, 6});
     }
 }

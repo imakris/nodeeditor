@@ -7,6 +7,7 @@ add_executable(test_nodes
   src/TestDataFlowGraphModel.cpp
   src/TestNodeDelegateModelRegistry.cpp
   src/TestConnectionId.cpp
+  src/TestDynamicPortsSerialization.cpp
   src/TestSerialization.cpp
   src/TestUndoCommands.cpp
   src/TestBasicGraphicsScene.cpp
@@ -24,11 +25,18 @@ add_executable(test_nodes
   include/TestGraphModel.hpp
   include/UITestHelper.hpp
   include/TestDataFlowNodes.hpp
+  ../examples/dynamic_ports/DynamicPortsModel.cpp
+  ../examples/dynamic_ports/DynamicPortsModel.hpp
+  ../examples/dynamic_ports/DynamicPortsActions.cpp
+  ../examples/dynamic_ports/DynamicPortsActions.hpp
+  ../examples/dynamic_ports/PortAddRemoveWidget.cpp
+  ../examples/dynamic_ports/PortAddRemoveWidget.hpp
 )
 
 target_include_directories(test_nodes
   PRIVATE
     include
+    ../examples/dynamic_ports
 )
 
 target_link_libraries(test_nodes
@@ -73,6 +81,10 @@ set(qt_nodes_installed_consumer_arguments
   "-DQT_NODES_TEST_QT6_DIR=${Qt6_DIR}"
   "-DQT_NODES_TEST_PROVIDER_SOURCE_DIR=${qt_nodes_qt_dispatch_SOURCE_DIR}"
 )
+if(WIN32)
+  list(APPEND qt_nodes_installed_consumer_arguments
+    "-DQT_NODES_TEST_QT_RUNTIME_DIR=$<TARGET_FILE_DIR:Qt6::Core>")
+endif()
 
 foreach(qt_nodes_library_mode IN ITEMS static shared)
   add_test(

@@ -44,3 +44,13 @@ target_link_libraries(
   qt_nodes_installed_consumer
   PRIVATE
     QtNodes::QtNodes)
+
+get_target_property(qt_nodes_library_type QtNodes::QtNodes TYPE)
+if(qt_nodes_library_type STREQUAL "SHARED_LIBRARY")
+  add_custom_command(
+    TARGET qt_nodes_installed_consumer
+    POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "$<TARGET_FILE:QtNodes::QtNodes>"
+      "$<TARGET_FILE_DIR:qt_nodes_installed_consumer>")
+endif()

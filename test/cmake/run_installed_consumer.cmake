@@ -14,6 +14,11 @@ foreach(required_variable IN ITEMS
   endif()
 endforeach()
 
+if(WIN32 AND (NOT DEFINED QT_NODES_TEST_QT_RUNTIME_DIR
+              OR QT_NODES_TEST_QT_RUNTIME_DIR STREQUAL ""))
+  message(FATAL_ERROR "QT_NODES_TEST_QT_RUNTIME_DIR is required on Windows.")
+endif()
+
 if(QT_NODES_TEST_LIBRARY_MODE STREQUAL "static")
   set(build_shared_libs OFF)
   set(expect_provider TRUE)
@@ -197,4 +202,42 @@ if(NOT consumer_build_result EQUAL 0)
   message(FATAL_ERROR
     "QtNodes ${QT_NODES_TEST_LIBRARY_MODE} consumer build failed.\n"
     "${consumer_build_output}\n${consumer_build_error}")
+endif()
+
+if(WIN32)
+  set(consumer_executable_suffix ".exe")
+else()
+  set(consumer_executable_suffix "")
+endif()
+set(consumer_executable
+  "${consumer_binary_dir}/qt_nodes_installed_consumer${consumer_executable_suffix}")
+if(EXISTS
+    "${consumer_binary_dir}/${QT_NODES_TEST_CONFIG}/qt_nodes_installed_consumer${consumer_executable_suffix}")
+  set(consumer_executable
+    "${consumer_binary_dir}/${QT_NODES_TEST_CONFIG}/qt_nodes_installed_consumer${consumer_executable_suffix}")
+endif()
+if(NOT EXISTS "${consumer_executable}")
+  message(FATAL_ERROR
+    "QtNodes ${QT_NODES_TEST_LIBRARY_MODE} consumer executable was not found.")
+endif()
+
+if(WIN32)
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "PATH=${QT_NODES_TEST_QT_RUNTIME_DIR};$ENV{PATH}"
+      "${consumer_executable}"
+    RESULT_VARIABLE consumer_run_result
+    OUTPUT_VARIABLE consumer_run_output
+    ERROR_VARIABLE consumer_run_error)
+else()
+  execute_process(
+    COMMAND "${consumer_executable}"
+    RESULT_VARIABLE consumer_run_result
+    OUTPUT_VARIABLE consumer_run_output
+    ERROR_VARIABLE consumer_run_error)
+endif()
+if(NOT consumer_run_result EQUAL 0)
+  message(FATAL_ERROR
+    "QtNodes ${QT_NODES_TEST_LIBRARY_MODE} consumer run failed.\n"
+    "${consumer_run_output}\n${consumer_run_error}")
 endif()

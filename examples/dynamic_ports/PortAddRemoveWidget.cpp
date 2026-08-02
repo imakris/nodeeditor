@@ -30,6 +30,9 @@ PortAddRemoveWidget::PortAddRemoveWidget(unsigned int nInPorts,
     hl->addLayout(_left);
     hl->addSpacing(50);
     hl->addLayout(_right);
+
+    populateButtons(PortType::In, nInPorts);
+    populateButtons(PortType::Out, nOutPorts);
 }
 
 PortAddRemoveWidget::~PortAddRemoveWidget()
@@ -104,11 +107,15 @@ void PortAddRemoveWidget::onPlusClicked()
     // button has been actually clicked.
     std::tie(portType, portIndex) = findWhichPortWasClicked(QObject::sender(), plusButtonIndex);
 
-    // We add new "plus-minus" button group to the chosen layout.
-    addButtonGroupToLayout((portType == PortType::In) ? _left : _right, portIndex + 1);
+    QVBoxLayout *const layout = portType == PortType::In ? _left : _right;
+    addButtonGroupToLayout(layout, portIndex + 1);
 
-    // Trigger changes in the model
-    _model.addPort(_nodeId, portType, portIndex + 1);
+    // Keep the original publication order: observers see the updated widget.
+    // Roll back the UI when the model rejects bounded resource growth.
+    if (!_model.addPort(_nodeId, portType, portIndex + 1)) {
+        removeButtonGroupFromLayout(layout, portIndex + 1);
+        return;
+    }
 
     adjustSize();
 }

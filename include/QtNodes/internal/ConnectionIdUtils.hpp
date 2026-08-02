@@ -135,16 +135,6 @@ inline bool tryFromJson(QJsonObject const &connJson, ConnectionId &connId)
     return true;
 }
 
-inline ConnectionId fromJson(QJsonObject const &connJson)
-{
-    ConnectionId connId{InvalidNodeId, InvalidPortIndex, InvalidNodeId, InvalidPortIndex};
-
-    bool const ok = tryFromJson(connJson, connId);
-    Q_ASSERT(ok);
-
-    return connId;
-}
-
 inline NodeRole portCountRole(PortType portType) noexcept
 {
     switch (portType) {

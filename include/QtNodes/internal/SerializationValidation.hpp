@@ -10,7 +10,9 @@
 
 namespace QtNodes::detail {
 
-bool read_unsigned_number(QJsonValue const &value, quint64 maxValue, quint64 &result);
+NODE_EDITOR_PUBLIC bool read_unsigned_number(QJsonValue const &value,
+                                             quint64 maxValue,
+                                             quint64 &result);
 
 /// Reads an unsigned integer-typed id (NodeId / GroupId / PortIndex) from
 /// `value`, rejecting the `InvalidId` sentinel and anything larger.

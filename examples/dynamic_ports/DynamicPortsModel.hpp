@@ -1,7 +1,9 @@
 #pragma once
 
+#include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QPointF>
+#include <QtCore/QPointer>
 #include <QtCore/QSize>
 
 #include <QtNodes/AbstractGraphModel>
@@ -17,6 +19,7 @@ using ConnectionPolicy = QtNodes::ConnectionPolicy;
 using NodeFlag = QtNodes::NodeFlag;
 using NodeId = QtNodes::NodeId;
 using NodeRole = QtNodes::NodeRole;
+using PortCount = QtNodes::PortCount;
 using PortIndex = QtNodes::PortIndex;
 using PortRole = QtNodes::PortRole;
 using PortType = QtNodes::PortType;
@@ -33,6 +36,13 @@ class DynamicPortsModel : public QtNodes::AbstractGraphModel
 {
     Q_OBJECT
 public:
+    /// Operational bounds for this widget-heavy teaching example.
+    static constexpr std::size_t s_max_serialized_nodes = 128;
+    static constexpr PortCount s_max_serialized_ports_per_node = 32;
+    static constexpr std::size_t s_max_serialized_ports = 256;
+    static constexpr std::size_t s_max_serialized_connections = 256;
+    static constexpr qsizetype s_max_serialized_bytes = 1024 * 1024;
+
     struct NodeGeometryData
     {
         QSize size;
@@ -42,7 +52,7 @@ public:
 public:
     DynamicPortsModel();
 
-    ~DynamicPortsModel() override = default;
+    ~DynamicPortsModel() override;
 
     NodeIdSet const &allNodeIds() const override;
 
@@ -55,6 +65,9 @@ public:
     bool connectionExists(ConnectionId const connectionId) const override;
 
     NodeId addNode(QString const nodeType = QString()) override;
+
+    /// Adds and positions one UI-created node, returning false on expected refusal.
+    bool try_add_node(QPointF const &position, NodeId *node_id = nullptr) noexcept;
 
     /**
    * Connection is possible when graph contains no connectivity data
@@ -102,15 +115,24 @@ public:
    */
     void loadNode(QJsonObject const &nodeJson) override;
 
-    void load(QJsonObject const &jsonDocument);
+    bool load(QJsonObject const &jsonDocument);
 
-    void addPort(NodeId nodeId, PortType portType, PortIndex portIndex);
+    /// Parses a complete JSON document and applies it only when fully valid.
+    bool load_from_json(QByteArray const &serialized);
+
+    bool addPort(NodeId nodeId, PortType portType, PortIndex portIndex);
 
     void removePort(NodeId nodeId, PortType portType, PortIndex first);
 
-    NodeId newNodeId() override { return _nextNodeId++; }
+    NodeId newNodeId() override;
 
 private:
+    bool port_count_allowed(NodeId node_id, PortType port_type, PortCount count) const;
+
+    bool position_allowed(QPointF const &position) const;
+
+    void delete_widget(QPointer<PortAddRemoveWidget> const &widget) const;
+
     NodeIdSet _nodeIds;
 
     /// [Important] This is a user defined data structure backing your model.
@@ -130,7 +152,7 @@ private:
     PortAddRemoveWidget *widget(NodeId) const;
 
     mutable std::unordered_map<NodeId, NodePortCount> _nodePortCounts;
-    mutable std::unordered_map<NodeId, PortAddRemoveWidget *> _nodeWidgets;
+    mutable std::unordered_map<NodeId, QPointer<PortAddRemoveWidget>> _nodeWidgets;
 
     /// A convenience variable needed for generating unique node ids.
     NodeId _nextNodeId;
