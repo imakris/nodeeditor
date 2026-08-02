@@ -30,13 +30,19 @@ Your model must implement these pure virtual methods:
        ConnectionIdSet const &allConnectionIds(NodeId) const override;
        ConnectionIdSet const &connections(NodeId, PortType, PortIndex) const override;
        bool connectionExists(ConnectionId) const override;
-       bool connectionPossible(ConnectionId) const override;
+       bool connectionPossible(
+           ConnectionId,
+           std::vector<ConnectionId> const &replacedConnectionIds) const override;
 
        // Mutations
        NodeId addNode(QString nodeType) override;
        void addConnection(ConnectionId) override;
        bool deleteNode(NodeId) override;
        bool deleteConnection(ConnectionId) override;
+       std::unique_ptr<ConnectionReplacementTransaction>
+       prepareConnectionReplacement(
+           std::vector<ConnectionId> const &removedConnectionIds,
+           std::vector<ConnectionId> const &addedConnectionIds) noexcept override;
 
        // Port queries
        QVariant portData(NodeId, PortType, PortIndex, PortRole) const override;
@@ -202,8 +208,16 @@ Control what connections are allowed:
 
 .. code-block:: cpp
 
-   bool MyGraphModel::connectionPossible(ConnectionId conn) const
+   bool MyGraphModel::connectionPossible(
+       ConnectionId conn,
+       std::vector<ConnectionId> const& replacedConnectionIds) const
    {
+       auto isReplaced = [&](ConnectionId existing) {
+           return std::find(replacedConnectionIds.begin(),
+                            replacedConnectionIds.end(),
+                            existing) != replacedConnectionIds.end();
+       };
+
        // Nodes must exist
        if (!nodeExists(conn.inNodeId) || !nodeExists(conn.outNodeId))
            return false;
@@ -213,12 +227,106 @@ Control what connections are allowed:
            return false;
 
        // No duplicate connections
-       if (connectionExists(conn))
+       if (connectionExists(conn) && !isReplaced(conn))
+           return false;
+
+       // Capacity checks must count only connections that will remain.
+       auto const& inputConnections =
+           connections(conn.inNodeId, PortType::In, conn.inPortIndex);
+       auto remainingInputCount = std::count_if(
+           inputConnections.begin(), inputConnections.end(),
+           [&](ConnectionId existing) { return !isReplaced(existing); });
+       if (remainingInputCount != 0)
            return false;
 
        // Custom logic: check port compatibility, etc.
        return true;
    }
+
+``replacedConnectionIds`` contains the existing edges that an atomic
+one-output replacement will remove. Validation must treat those exact edges as
+absent without changing the model; ordinary callers pass an empty vector
+explicitly as ``{}``.
+
+**Atomic Connection Replacement**
+
+``prepareConnectionReplacement()`` is called before a single-output rewire can
+enter undo history. It must perform every fallible admission and graph-storage
+operation up front: verify that every removed id exists and is detachable, call
+``connectionPossible()`` with that exact removed set, allocate the alternate
+storage state, and construct the transaction. It returns null without mutation
+or notification on any failure:
+
+.. code-block:: cpp
+
+   std::unique_ptr<ConnectionReplacementTransaction>
+   MyGraphModel::prepareConnectionReplacement(
+       std::vector<ConnectionId> const& removed,
+       std::vector<ConnectionId> const& added) noexcept
+   {
+       try {
+           if (added.size() != 1)
+               return {};
+           for (ConnectionId id : removed) {
+               if (!connectionExists(id) || !detachPossible(id))
+                   return {};
+           }
+           if (!connectionPossible(added.front(), removed))
+               return {};
+
+           auto prepared = _connectionIndex.preparedReplacement(removed, added);
+           if (!prepared)
+               return {};
+
+           auto publishOne = [](auto&& notification) {
+               try {
+                   notification();
+               } catch (std::exception const& error) {
+                   qWarning() << "Connection replacement notification failed:"
+                              << error.what();
+               } catch (...) {
+                   qWarning() << "Connection replacement notification failed"
+                                 " with an unknown exception";
+               }
+           };
+           auto publish = [this, publishOne](auto const& deleted,
+                                             auto const& created) {
+               // The transaction swaps complete storage before this callback.
+               for (ConnectionId id : deleted)
+                   publishOne([&] { emit connectionDeleted(id); });
+               for (ConnectionId id : created)
+                   publishOne([&] { emit connectionCreated(id); });
+           };
+           using Transaction =
+               ConnectionIdIndexReplacementTransaction<decltype(publish)>;
+           return std::make_unique<Transaction>(_connectionIndex,
+                                                std::move(*prepared),
+                                                removed,
+                                                added,
+                                                std::move(publish));
+       } catch (...) {
+           return {};
+       }
+   }
+
+The transaction owns the inactive prebuilt state; the model still has one active
+topology index. Its non-refusing ``undo()`` and ``redo()`` operations only swap
+complete states. ``publishUndo()`` and ``publishRedo()`` are separate post-swap
+operations for signals, delegate callbacks, and data delivery, which may be
+fallible. Constructing the transaction, including moving its publisher into
+place, is also fallible preparation and belongs inside the method's catch
+boundary. The transaction constructor is deliberately not ``noexcept``.
+
+A publisher must diagnose and contain each individual signal or callback
+failure and continue with later deletions and creations. The command boundary
+also contains and warns on an unexpected publisher exception as a last resort,
+so an exception cannot terminate replay or make undo history disagree with
+topology.
+
+Topology replay does not validate, allocate graph storage, return a status, or
+consult a refusal flag. Do not implement it by calling ``deleteConnection()``
+and ``addConnection()`` in a loop: an individual failure or observer callback
+would expose a partial topology.
 
 PortRole Reference
 ------------------

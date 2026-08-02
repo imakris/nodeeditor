@@ -55,8 +55,37 @@ QtNodes provides these ``QUndoCommand`` implementations in ``UndoCommands.cpp``:
      - Removes a connection
    * - ``ConnectCommand``
      - Creates a connection
+   * - ``ReplaceConnectionCommand``
+     - Atomically replaces the exact existing edge set of a single-connection output
    * - ``MoveNodeCommand``
      - Moves a node to a new position
+
+Before a replacement command enters the undo stack, it asks the graph model to
+``prepareConnectionReplacement()``. Preparation performs all fallible work
+needed for admission and graph storage: semantic validation, snapshot
+allocation, construction of the alternate complete topology state, and
+construction of the transaction publisher. Publisher moves are allowed to
+throw inside this preparation boundary. A null result leaves topology,
+callbacks, and history unchanged.
+
+The returned ``ConnectionReplacementTransaction`` has non-refusing ``noexcept``
+``undo()`` and ``redo()`` operations. They exchange the active and prepared
+states without allocating graph storage. The command then calls the matching
+post-swap publication operation for signals, delegate callbacks, and data
+delivery. Each individual notification failure is reported with a Qt warning,
+contained, and followed by the remaining deletion and creation notifications.
+The command boundary is last-resort containment for unexpected publisher
+failures. Thus the undo-stack index and topology cannot diverge, and one bad
+observer cannot leave later scene notifications unpublished. The exact prior
+set is restored even when current capacity or loop policy has changed (for
+example from ``Many`` to ``One``).
+
+``DataFlowGraphModel`` queries the source's current output value each time an
+edge is recreated; replay never reuses a value captured when the command was
+prepared. A frozen target refuses that value exactly as it does for ordinary
+connection creation and updates: the edge remains present and no input-data
+signal is emitted. An exception from output lookup or input delivery is
+contained and warned after the topology swap.
 
 Serialization Requirement
 -------------------------

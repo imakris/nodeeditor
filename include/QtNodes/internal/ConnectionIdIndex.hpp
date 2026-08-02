@@ -1,9 +1,13 @@
 #pragma once
 
+#include "AbstractGraphModel.hpp"
 #include "ConnectionIdHash.hpp"
 
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace QtNodes {
 
@@ -71,6 +75,63 @@ public:
         return true;
     }
 
+    /**
+     * Builds a complete replacement state without changing this index.
+     *
+     * Every removed id must exist. Every added id must be absent after the
+     * removals. Duplicate ids in either argument are rejected. Allocation or
+     * indexing failure returns no state and leaves this index unchanged.
+     */
+    [[nodiscard]] std::optional<ConnectionIdIndex> preparedReplacement(
+        std::vector<ConnectionId> const &removedConnectionIds,
+        std::vector<ConnectionId> const &addedConnectionIds) const noexcept
+    {
+        try {
+            ConnectionSet uniqueRemoved;
+            ConnectionSet uniqueAdded;
+
+            for (ConnectionId const connectionId : removedConnectionIds) {
+                if (!uniqueRemoved.insert(connectionId).second || !contains(connectionId)) {
+                    return std::nullopt;
+                }
+            }
+
+            for (ConnectionId const connectionId : addedConnectionIds) {
+                if (!uniqueAdded.insert(connectionId).second) {
+                    return std::nullopt;
+                }
+            }
+
+            ConnectionIdIndex prepared(*this);
+            for (ConnectionId const connectionId : removedConnectionIds) {
+                if (!prepared.remove(connectionId)) {
+                    return std::nullopt;
+                }
+            }
+
+            for (ConnectionId const connectionId : addedConnectionIds) {
+                if (prepared.contains(connectionId)) {
+                    return std::nullopt;
+                }
+                prepared.add(connectionId);
+            }
+
+            return prepared;
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+
+    /// Exchanges complete index states without allocating.
+    void swap(ConnectionIdIndex &other) noexcept
+    {
+        using std::swap;
+        swap(_connectivity, other._connectivity);
+        swap(_nodeConnections, other._nodeConnections);
+        swap(_inConnectionsByPort, other._inConnectionsByPort);
+        swap(_outConnectionsByPort, other._outConnectionsByPort);
+    }
+
 private:
     static ConnectionSet const &emptyConnections() noexcept
     {
@@ -83,7 +144,8 @@ private:
         _nodeConnections[connectionId.inNodeId].insert(connectionId);
         _nodeConnections[connectionId.outNodeId].insert(connectionId);
         _inConnectionsByPort[connectionId.inNodeId][connectionId.inPortIndex].insert(connectionId);
-        _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(connectionId);
+        _outConnectionsByPort[connectionId.outNodeId][connectionId.outPortIndex].insert(
+            connectionId);
     }
 
     void unindexConnection(ConnectionId const connectionId)
@@ -100,29 +162,28 @@ private:
             }
         };
 
-        auto eraseFromPortMap =
-            [&](std::unordered_map<NodeId, ConnectionsByPort> &connectionsByPort,
-                NodeId nodeId,
-                PortIndex portIndex) {
-                auto nodeIt = connectionsByPort.find(nodeId);
-                if (nodeIt == connectionsByPort.end()) {
-                    return;
-                }
+        auto eraseFromPortMap = [&](std::unordered_map<NodeId, ConnectionsByPort> &connectionsByPort,
+                                    NodeId nodeId,
+                                    PortIndex portIndex) {
+            auto nodeIt = connectionsByPort.find(nodeId);
+            if (nodeIt == connectionsByPort.end()) {
+                return;
+            }
 
-                auto portIt = nodeIt->second.find(portIndex);
-                if (portIt == nodeIt->second.end()) {
-                    return;
-                }
+            auto portIt = nodeIt->second.find(portIndex);
+            if (portIt == nodeIt->second.end()) {
+                return;
+            }
 
-                portIt->second.erase(connectionId);
-                if (portIt->second.empty()) {
-                    nodeIt->second.erase(portIt);
-                }
+            portIt->second.erase(connectionId);
+            if (portIt->second.empty()) {
+                nodeIt->second.erase(portIt);
+            }
 
-                if (nodeIt->second.empty()) {
-                    connectionsByPort.erase(nodeIt);
-                }
-            };
+            if (nodeIt->second.empty()) {
+                connectionsByPort.erase(nodeIt);
+            }
+        };
 
         eraseFromNode(connectionId.inNodeId);
         eraseFromNode(connectionId.outNodeId);
@@ -135,6 +196,45 @@ private:
     std::unordered_map<NodeId, ConnectionSet> _nodeConnections;
     std::unordered_map<NodeId, ConnectionsByPort> _inConnectionsByPort;
     std::unordered_map<NodeId, ConnectionsByPort> _outConnectionsByPort;
+};
+
+/**
+ * Replays a prepared index replacement by swapping complete states.
+ *
+ * The inactive state belongs to this transaction; the model keeps a single
+ * active topology index. Publication is an explicit post-swap phase because
+ * observers and data delivery may be fallible.
+ */
+template<typename Publisher>
+class ConnectionIdIndexReplacementTransaction final : public ConnectionReplacementTransaction
+{
+public:
+    ConnectionIdIndexReplacementTransaction(ConnectionIdIndex &activeIndex,
+                                            ConnectionIdIndex preparedIndex,
+                                            std::vector<ConnectionId> removedConnectionIds,
+                                            std::vector<ConnectionId> addedConnectionIds,
+                                            Publisher publisher)
+        : _activeIndex(activeIndex)
+        , _preparedIndex(std::move(preparedIndex))
+        , _removedConnectionIds(std::move(removedConnectionIds))
+        , _addedConnectionIds(std::move(addedConnectionIds))
+        , _publisher(std::move(publisher))
+    {}
+
+    void undo() noexcept override { _activeIndex.swap(_preparedIndex); }
+
+    void redo() noexcept override { _activeIndex.swap(_preparedIndex); }
+
+    void publishUndo() override { _publisher(_addedConnectionIds, _removedConnectionIds); }
+
+    void publishRedo() override { _publisher(_removedConnectionIds, _addedConnectionIds); }
+
+private:
+    ConnectionIdIndex &_activeIndex;
+    ConnectionIdIndex _preparedIndex;
+    std::vector<ConnectionId> _removedConnectionIds;
+    std::vector<ConnectionId> _addedConnectionIds;
+    Publisher _publisher;
 };
 
 } // namespace QtNodes

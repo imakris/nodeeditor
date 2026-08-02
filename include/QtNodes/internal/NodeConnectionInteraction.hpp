@@ -4,6 +4,8 @@
 #include "NodeGraphicsObject.hpp"
 #include <QtCore/QPointF>
 
+#include <vector>
+
 namespace QtNodes {
 
 class ConnectionGraphicsObject;
@@ -20,7 +22,7 @@ class NodeConnectionInteraction
 {
 public:
     NodeConnectionInteraction(NodeGraphicsObject &ngo,
-                              ConnectionGraphicsObject &cgo,
+                              ConnectionGraphicsObject const &cgo,
                               BasicGraphicsScene &scene);
 
     /**
@@ -37,6 +39,8 @@ public:
      *       `AbstractGrphModel::loopsEnabled()` forbits it.
      */
     bool canConnect(PortIndex *portIndex) const;
+
+    bool connectionPossible(ConnectionId const &connectionId) const;
 
     /// Creates a new connectino if possible.
     /**
@@ -59,12 +63,14 @@ public:
     NodeGraphicsObject &nodeGraphicsObject() { return _ngo; }
 
 private:
+    std::vector<ConnectionId> replacedConnectionIds() const;
+
     PortIndex nodePortIndexUnderScenePoint(PortType portType, QPointF const &p) const;
 
 private:
     NodeGraphicsObject &_ngo;
 
-    ConnectionGraphicsObject &_cgo;
+    ConnectionGraphicsObject const &_cgo;
 
     BasicGraphicsScene &_scene;
 };

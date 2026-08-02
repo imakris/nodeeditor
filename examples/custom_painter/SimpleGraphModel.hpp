@@ -9,7 +9,9 @@
 #include <QtNodes/ConnectionIdUtils>
 #include <QtNodes/StyleCollection>
 
+#include <memory>
 #include <unordered_map>
+#include <vector>
 
 using ConnectionId = QtNodes::ConnectionId;
 using ConnectionPolicy = QtNodes::ConnectionPolicy;
@@ -50,7 +52,13 @@ public:
 
     NodeId addNode(QString const nodeType = QString()) override;
 
-    bool connectionPossible(ConnectionId const connectionId) const override;
+    bool connectionPossible(ConnectionId const connectionId,
+                            std::vector<ConnectionId> const &replacedConnectionIds) const override;
+
+    [[nodiscard]] std::unique_ptr<QtNodes::ConnectionReplacementTransaction>
+    prepareConnectionReplacement(
+        std::vector<ConnectionId> const &removedConnectionIds,
+        std::vector<ConnectionId> const &addedConnectionIds) noexcept override;
 
     void addConnection(ConnectionId const connectionId) override;
 

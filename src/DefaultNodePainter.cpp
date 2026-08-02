@@ -10,6 +10,7 @@
 #include "NodeRenderingUtils.hpp"
 #include "NodeDelegateModel.hpp"
 #include "NodeGraphicsObject.hpp"
+#include "NodeConnectionInteraction.hpp"
 #include "NodeState.hpp"
 #include "StyleCollection.hpp"
 #include "node_shadow_atlas.hpp"
@@ -332,7 +333,8 @@ void DefaultNodePainter::drawConnectionPoints(QPainter *painter, NodeGraphicsObj
                 ConnectionId const possibleConnectionId
                     = makeCompleteConnectionId(cgo->connectionId(), nodeId, portIndex);
 
-                bool const possible = model.connectionPossible(possibleConnectionId);
+                NodeConnectionInteraction interaction(ngo, *cgo, *ngo.nodeScene());
+                bool const possible = interaction.connectionPossible(possibleConnectionId);
 
                 QPointF cp = cgo->sceneTransform().map(cgo->endPoint(requiredPort));
                 cp = ngo.sceneTransform().inverted().map(cp);

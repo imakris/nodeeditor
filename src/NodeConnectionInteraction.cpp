@@ -11,16 +11,18 @@
 
 #include <QUndoStack>
 
+#include <algorithm>
+#include <tuple>
+
 namespace QtNodes {
 
 NodeConnectionInteraction::NodeConnectionInteraction(NodeGraphicsObject &ngo,
-                                                     ConnectionGraphicsObject &cgo,
+                                                     ConnectionGraphicsObject const &cgo,
                                                      BasicGraphicsScene &scene)
     : _ngo(ngo)
     , _cgo(cgo)
     , _scene(scene)
 {}
-
 
 // This is the chneck from the perspective of the ConnectionGraphicsObject
 bool NodeConnectionInteraction::canConnect(PortIndex *portIndex) const
@@ -39,12 +41,25 @@ bool NodeConnectionInteraction::canConnect(PortIndex *portIndex) const
     }
 
     // 3. Model permits connection.
-    AbstractGraphModel &model = _ngo.nodeScene()->graphModel();
     ConnectionId connectionId = makeCompleteConnectionId(_cgo.connectionId(), // incomplete
                                                          _ngo.nodeId(),       // missing node id
                                                          *portIndex);         // missing port index
 
-    return model.connectionPossible(connectionId);
+    return connectionPossible(connectionId);
+}
+
+bool NodeConnectionInteraction::connectionPossible(ConnectionId const &connectionId) const
+{
+    AbstractGraphModel &model = _scene.graphModel();
+    std::vector<ConnectionId> const replaced = replacedConnectionIds();
+
+    for (ConnectionId const &replacedConnectionId : replaced) {
+        if (!model.detachPossible(replacedConnectionId)) {
+            return false;
+        }
+    }
+
+    return model.connectionPossible(connectionId, replaced);
 }
 
 bool NodeConnectionInteraction::tryConnect() const
@@ -64,9 +79,15 @@ bool NodeConnectionInteraction::tryConnect() const
                                                             _ngo.nodeId(),
                                                             targetPortIndex);
 
-    _ngo.nodeScene()->resetDraftConnection();
+    std::vector<ConnectionId> const replaced = replacedConnectionIds();
 
-    _ngo.nodeScene()->undoStack().push(new ConnectCommand(_ngo.nodeScene(), newConnectionId));
+    _scene.resetDraftConnection();
+
+    if (replaced.empty()) {
+        _scene.undoStack().push(new ConnectCommand(&_scene, newConnectionId));
+    } else {
+        _scene.undoStack().push(new ReplaceConnectionCommand(&_scene, newConnectionId, replaced));
+    }
 
     return true;
 }
@@ -106,6 +127,35 @@ bool NodeConnectionInteraction::disconnect(PortType portToDisconnect) const
     }
 
     return true;
+}
+
+std::vector<ConnectionId> NodeConnectionInteraction::replacedConnectionIds() const
+{
+    ConnectionId const incompleteConnectionId = _cgo.connectionId();
+    if (_cgo.connectionState().requiredPort() != PortType::In) {
+        return {};
+    }
+
+    AbstractGraphModel const &model = _scene.graphModel();
+    auto const policy = model
+                            .portData(incompleteConnectionId.outNodeId,
+                                      PortType::Out,
+                                      incompleteConnectionId.outPortIndex,
+                                      PortRole::ConnectionPolicy)
+                            .value<ConnectionPolicy>();
+    if (policy != ConnectionPolicy::One) {
+        return {};
+    }
+
+    auto const &connected = model.connections(incompleteConnectionId.outNodeId,
+                                              PortType::Out,
+                                              incompleteConnectionId.outPortIndex);
+    std::vector<ConnectionId> result(connected.begin(), connected.end());
+    std::sort(result.begin(), result.end(), [](ConnectionId const &a, ConnectionId const &b) {
+        return std::tie(a.outNodeId, a.outPortIndex, a.inNodeId, a.inPortIndex)
+               < std::tie(b.outNodeId, b.outPortIndex, b.inNodeId, b.inPortIndex);
+    });
+    return result;
 }
 
 PortIndex NodeConnectionInteraction::nodePortIndexUnderScenePoint(PortType portType,

@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace QtNodes {
 
@@ -53,7 +54,13 @@ public:
 
     [[nodiscard]] NodeId addNode(QString const nodeType) override;
 
-    [[nodiscard]] bool connectionPossible(ConnectionId const connectionId) const override;
+    [[nodiscard]] bool connectionPossible(
+        ConnectionId const connectionId,
+        std::vector<ConnectionId> const &replacedConnectionIds) const override;
+
+    [[nodiscard]] std::unique_ptr<ConnectionReplacementTransaction> prepareConnectionReplacement(
+        std::vector<ConnectionId> const &removedConnectionIds,
+        std::vector<ConnectionId> const &addedConnectionIds) noexcept override;
 
     void addConnection(ConnectionId const connectionId) override;
 

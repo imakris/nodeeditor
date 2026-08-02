@@ -4,29 +4,47 @@
 
 #include <QtNodes/ConnectionIdUtils>
 
+#include <QtCore/QDebug>
 #include <QtCore/QJsonArray>
 
+#include <algorithm>
+#include <exception>
 #include <iterator>
 #include <vector>
+
+namespace {
+
+template<typename Notification>
+void publishConnectionReplacementNotification(Notification &&notification)
+{
+    try {
+        notification();
+    } catch (std::exception const &error) {
+        qWarning() << "Connection replacement notification failed:" << error.what();
+    } catch (...) {
+        qWarning() << "Connection replacement notification failed with an unknown exception";
+    }
+}
+
+} // namespace
 
 DynamicPortsModel::DynamicPortsModel()
     : _nextNodeId{0}
 {}
-
 
 QtNodes::AbstractGraphModel::NodeIdSet const &DynamicPortsModel::allNodeIds() const
 {
     return _nodeIds;
 }
 
-QtNodes::AbstractGraphModel::ConnectionIdSet const &
-DynamicPortsModel::allConnectionIds(NodeId const nodeId) const
+QtNodes::AbstractGraphModel::ConnectionIdSet const &DynamicPortsModel::allConnectionIds(
+    NodeId const nodeId) const
 {
     return _connectionIndex.allConnectionIds(nodeId);
 }
 
-QtNodes::AbstractGraphModel::ConnectionIdSet const &
-DynamicPortsModel::connections(NodeId nodeId, PortType portType, PortIndex portIndex) const
+QtNodes::AbstractGraphModel::ConnectionIdSet const &DynamicPortsModel::connections(
+    NodeId nodeId, PortType portType, PortIndex portIndex) const
 {
     return _connectionIndex.connections(nodeId, portType, portIndex);
 }
@@ -48,9 +66,67 @@ NodeId DynamicPortsModel::addNode(QString const nodeType)
     return newId;
 }
 
-bool DynamicPortsModel::connectionPossible(ConnectionId const connectionId) const
+bool DynamicPortsModel::connectionPossible(
+    ConnectionId const connectionId, std::vector<ConnectionId> const &replacedConnectionIds) const
 {
-    return !_connectionIndex.contains(connectionId);
+    auto isReplaced = [&](ConnectionId const candidate) {
+        return std::find(replacedConnectionIds.begin(), replacedConnectionIds.end(), candidate)
+               != replacedConnectionIds.end();
+    };
+    auto vacant = [&](NodeId nodeId, PortType portType, PortIndex portIndex) {
+        auto const &attached = connections(nodeId, portType, portIndex);
+        return std::all_of(attached.begin(), attached.end(), isReplaced);
+    };
+
+    return (!_connectionIndex.contains(connectionId) || isReplaced(connectionId))
+           && vacant(connectionId.outNodeId, PortType::Out, connectionId.outPortIndex)
+           && vacant(connectionId.inNodeId, PortType::In, connectionId.inPortIndex);
+}
+
+std::unique_ptr<QtNodes::ConnectionReplacementTransaction>
+DynamicPortsModel::prepareConnectionReplacement(
+    std::vector<ConnectionId> const &removedConnectionIds,
+    std::vector<ConnectionId> const &addedConnectionIds) noexcept
+{
+    try {
+        if (addedConnectionIds.size() != 1U) {
+            return {};
+        }
+        for (ConnectionId const connectionId : removedConnectionIds) {
+            if (!connectionExists(connectionId) || !detachPossible(connectionId)) {
+                return {};
+            }
+        }
+        if (!connectionPossible(addedConnectionIds.front(), removedConnectionIds)) {
+            return {};
+        }
+
+        auto preparedIndex = _connectionIndex.preparedReplacement(removedConnectionIds,
+                                                                  addedConnectionIds);
+        if (!preparedIndex) {
+            return {};
+        }
+
+        auto publisher = [this](std::vector<ConnectionId> const &removedIds,
+                                std::vector<ConnectionId> const &addedIds) {
+            for (ConnectionId const connectionId : removedIds) {
+                publishConnectionReplacementNotification(
+                    [&] { Q_EMIT connectionDeleted(connectionId); });
+            }
+            for (ConnectionId const connectionId : addedIds) {
+                publishConnectionReplacementNotification(
+                    [&] { Q_EMIT connectionCreated(connectionId); });
+            }
+        };
+        using Transaction = QtNodes::ConnectionIdIndexReplacementTransaction<decltype(publisher)>;
+        return std::make_unique<Transaction>(_connectionIndex,
+                                             std::move(*preparedIndex),
+                                             removedConnectionIds,
+                                             addedConnectionIds,
+                                             std::move(publisher));
+    } catch (...) {
+        return {};
+    }
 }
 
 void DynamicPortsModel::addConnection(ConnectionId const connectionId)

@@ -218,8 +218,16 @@ Implement complex connection rules:
 
 .. code-block:: cpp
 
-   bool MyModel::connectionPossible(ConnectionId conn) const override
+   bool MyModel::connectionPossible(
+       ConnectionId conn,
+       std::vector<ConnectionId> const& replacedConnectionIds) const override
    {
+       auto isReplaced = [&](ConnectionId existing) {
+           return std::find(replacedConnectionIds.begin(),
+                            replacedConnectionIds.end(),
+                            existing) != replacedConnectionIds.end();
+       };
+
        // Basic checks
        if (!nodeExists(conn.inNodeId) || !nodeExists(conn.outNodeId))
            return false;
@@ -235,13 +243,40 @@ Implement complex connection rules:
        if (!typesCompatible(outType, inType))
            return false;
 
-       // Custom rule: max 3 connections to any input
-       if (connections(conn.inNodeId, PortType::In, conn.inPortIndex).size() >= 3)
+       // Reject a retained duplicate, but allow the same id when it is replaced.
+       if (connectionExists(conn) && !isReplaced(conn))
            return false;
 
-       // Cycle detection (if loops disabled)
-       if (!loopsEnabled() && wouldCreateCycle(conn))
+       // Custom capacity rule: count only retained input connections.
+       auto const& inputConnections =
+           connections(conn.inNodeId, PortType::In, conn.inPortIndex);
+       auto retainedInputCount = std::count_if(
+           inputConnections.begin(), inputConnections.end(),
+           [&](ConnectionId existing) { return !isReplaced(existing); });
+       if (retainedInputCount >= 3)
            return false;
+
+       // Cycle detection must traverse only retained edges as well.
+       if (!loopsEnabled()) {
+           std::stack<NodeId> pending;
+           pending.push(conn.inNodeId);
+           std::unordered_set<NodeId> visited;
+           while (!pending.empty()) {
+               NodeId node = pending.top();
+               pending.pop();
+               if (!visited.insert(node).second)
+                   continue;
+               if (node == conn.outNodeId)
+                   return false;
+               for (PortIndex port = 0; port < outputPortCount(node); ++port) {
+                   for (ConnectionId existing :
+                        connections(node, PortType::Out, port)) {
+                       if (!isReplaced(existing))
+                           pending.push(existing.inNodeId);
+                   }
+               }
+           }
+       }
 
        return true;
    }
@@ -266,11 +301,11 @@ Build graphs in code (useful for testing or loading custom formats):
        model.setNodeData(output, NodeRole::Position, QPointF(400, 0));
 
        // Create connections
-       if (model.connectionPossible({source, 0, process, 0})) {
+       if (model.connectionPossible({source, 0, process, 0}, {})) {
            model.addConnection({source, 0, process, 0});
        }
 
-       if (model.connectionPossible({process, 0, output, 0})) {
+       if (model.connectionPossible({process, 0, output, 0}, {})) {
            model.addConnection({process, 0, output, 0});
        }
    }

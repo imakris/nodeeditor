@@ -234,7 +234,7 @@ void BasicGraphicsScene::loadConnectionToMap(QJsonObject const &connectionJson,
         return;
     }
 
-    if (!_graphModel.connectionPossible(remapped)) {
+    if (!_graphModel.connectionPossible(remapped, {})) {
         throw std::logic_error("Serialized connection is not valid for restored nodes");
     }
 

@@ -207,6 +207,16 @@ Data Flow Diagram
 
    Size: ~600px wide
 
+Connection replacement replay follows the same delivery rule as ordinary
+connection creation: after the complete topology has changed and the creation
+notification has been published, ``DataFlowGraphModel`` calls ``outData()`` for
+the source's current value and offers it to the target with ``setInData()``.
+Frozen targets intentionally refuse that delivery while retaining the edge.
+For undo/redo replacement replay, each connection notification and each data
+lookup or delivery failure is reported with a Qt warning after the topology
+swap. Publication continues with the remaining connections, so history,
+topology, and later scene projections stay coherent.
+
 Embedded Widgets
 ----------------
 
@@ -344,18 +354,21 @@ must match exactly. Override ``connectionPossible()`` for custom logic:
 
 .. code-block:: cpp
 
-   bool MyModel::connectionPossible(ConnectionId conn) const
+   bool MyModel::connectionPossible(
+       ConnectionId conn,
+       std::vector<ConnectionId> const& replacedConnectionIds) const
    {
+       // Preserve DataFlowGraphModel's duplicate, capacity, and loop checks;
+       // it filters every id in replacedConnectionIds from those checks.
+       if (!DataFlowGraphModel::connectionPossible(conn, replacedConnectionIds))
+           return false;
+
        auto outType = portData(conn.outNodeId, PortType::Out,
                                conn.outPortIndex, PortRole::DataType);
        auto inType = portData(conn.inNodeId, PortType::In,
                               conn.inPortIndex, PortRole::DataType);
 
-       // Allow Integer -> Number conversion
-       if (outType == "integer" && inType == "number")
-           return true;
-
-       return outType == inType;
+       return domainAllowsConnection(outType, inType);
    }
 
 Complete Example

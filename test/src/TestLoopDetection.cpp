@@ -46,7 +46,7 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
 
         // Try to connect node to itself
         ConnectionId selfLoop{node1, 0, node1, 0};
-        CHECK_FALSE(model.connectionPossible(selfLoop));
+        CHECK_FALSE(model.connectionPossible(selfLoop, {}));
     }
 
     SECTION("Indirect loop A->B->A is prevented")
@@ -57,12 +57,12 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
 
         // Create A->B connection
         ConnectionId conn1{node1, 0, node2, 0};
-        CHECK(model.connectionPossible(conn1));
+        CHECK(model.connectionPossible(conn1, {}));
         model.addConnection(conn1);
 
         // Try to create B->A connection (would form a loop)
         ConnectionId conn2{node2, 0, node1, 0};
-        CHECK_FALSE(model.connectionPossible(conn2));
+        CHECK_FALSE(model.connectionPossible(conn2, {}));
     }
 
     SECTION("Loop-detection cache stays correct across topology changes")
@@ -74,15 +74,15 @@ TEST_CASE("Loop detection in DataFlowGraphModel", "[loops]")
         ConnectionId bToA{node2, 0, node1, 0};
 
         // Probe both directions first so the loop DFS is memoized for each node pair.
-        CHECK(model.connectionPossible(aToB));
-        CHECK(model.connectionPossible(bToA));
+        CHECK(model.connectionPossible(aToB, {}));
+        CHECK(model.connectionPossible(bToA, {}));
 
         // Realizing A->B must invalidate the memoized result for B->A...
         model.addConnection(aToB);
-        CHECK_FALSE(model.connectionPossible(bToA)); // would close a cycle
+        CHECK_FALSE(model.connectionPossible(bToA, {})); // would close a cycle
 
         // ...and removing it must make B->A possible again.
         model.deleteConnection(aToB);
-        CHECK(model.connectionPossible(bToA));
+        CHECK(model.connectionPossible(bToA, {}));
     }
 }

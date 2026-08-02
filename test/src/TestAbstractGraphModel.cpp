@@ -85,7 +85,7 @@ TEST_CASE("Connection management", "[core]")
     SECTION("Connection creation")
     {
         CHECK_FALSE(model.connectionExists(connId));
-        CHECK(model.connectionPossible(connId));
+        CHECK(model.connectionPossible(connId, {}));
 
         model.addConnection(connId);
         CHECK(model.connectionExists(connId));

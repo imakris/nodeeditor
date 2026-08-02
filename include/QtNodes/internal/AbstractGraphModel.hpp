@@ -8,9 +8,35 @@
 #include <QtCore/QObject>
 #include <QtCore/QVariant>
 
+#include <memory>
 #include <unordered_set>
+#include <vector>
 
 namespace QtNodes {
+
+/**
+ * A fully prepared connection replacement owned by its graph model.
+ *
+ * All validation and storage preparation happens before this object is
+ * returned. Topology replay cannot be refused and does not allocate graph
+ * storage. Notifications and data propagation are published afterwards so
+ * fallible client callbacks cannot prevent or roll back the topology change.
+ * A publisher must diagnose and contain each individual notification failure
+ * so later notifications in the same replay are still delivered.
+ */
+class NODE_EDITOR_PUBLIC ConnectionReplacementTransaction
+{
+public:
+    virtual ~ConnectionReplacementTransaction() = default;
+
+    virtual void undo() noexcept = 0;
+
+    virtual void redo() noexcept = 0;
+
+    virtual void publishUndo() = 0;
+
+    virtual void publishRedo() = 0;
+};
 
 /**
  * The central class in the Model-View approach. It delivers all kinds
@@ -79,8 +105,32 @@ public:
      *
      * It is possible to override the function and connect non-equal
      * data types.
+     *
+     * `replacedConnectionIds` identifies existing connections that an atomic
+     * replacement command will remove before adding `connectionId`. Validation
+     * must evaluate the candidate as if those exact connections were absent,
+     * without mutating the model.
      */
-    [[nodiscard]] virtual bool connectionPossible(ConnectionId const connectionId) const = 0;
+    [[nodiscard]] virtual bool connectionPossible(
+        ConnectionId const connectionId,
+        std::vector<ConnectionId> const &replacedConnectionIds) const = 0;
+
+    /**
+     * Prepares an exact, reversible connection-set replacement.
+     *
+     * `addedConnectionIds` contains one newly requested connection. The model
+     * validates every removal and the candidate, and builds both replay states
+     * without changing topology or publishing notifications. A null result
+     * rejects the whole operation. A non-null transaction provides non-refusing,
+     * allocation-free graph-storage replay for undo and redo. Each topology
+     * replay is followed by the matching publication operation, which may run
+     * fallible observer and data-delivery code without changing admission.
+     * Construction of the transaction and its publisher is fallible preparation
+     * work and must be contained before the transaction is returned.
+     */
+    [[nodiscard]] virtual std::unique_ptr<ConnectionReplacementTransaction>
+    prepareConnectionReplacement(std::vector<ConnectionId> const &removedConnectionIds,
+                                 std::vector<ConnectionId> const &addedConnectionIds) noexcept = 0;
 
     /// Defines if detaching the connection is possible.
     virtual bool detachPossible(ConnectionId const) const { return true; }
@@ -158,8 +208,7 @@ public:
                              PortType portType,
                              PortIndex index,
                              QVariant const &value,
-                             PortRole role = PortRole::Data)
-        = 0;
+                             PortRole role = PortRole::Data) = 0;
 
     virtual bool deleteConnection(ConnectionId const connectionId) = 0;
 

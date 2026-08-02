@@ -3,11 +3,15 @@
 #include <QtNodes/AbstractGraphModel>
 #include <QtNodes/ConnectionIdIndex>
 
-#include <QPointF>
+#include <QDebug>
 #include <QJsonObject>
-#include <QSizeF>
+#include <QPointF>
 #include <QSizeF>
 
+#include <algorithm>
+#include <exception>
+#include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -21,6 +25,45 @@ using QtNodes::PortIndex;
 using QtNodes::PortRole;
 using QtNodes::PortType;
 
+namespace TestGraphModelDetail {
+
+template<typename Notification>
+void publishConnectionReplacementNotification(Notification &&notification)
+{
+    try {
+        notification();
+    } catch (std::exception const &error) {
+        qWarning() << "Connection replacement notification failed:" << error.what();
+    } catch (...) {
+        qWarning() << "Connection replacement notification failed with an unknown exception";
+    }
+}
+
+class ThrowingMoveConnectionReplacementPublisher
+{
+public:
+    ThrowingMoveConnectionReplacementPublisher() = default;
+    ThrowingMoveConnectionReplacementPublisher(
+        ThrowingMoveConnectionReplacementPublisher const &) = delete;
+    ThrowingMoveConnectionReplacementPublisher &operator=(
+        ThrowingMoveConnectionReplacementPublisher const &) = delete;
+
+    ThrowingMoveConnectionReplacementPublisher(ThrowingMoveConnectionReplacementPublisher &&other)
+        : _throwOnMove(true)
+    {
+        if (other._throwOnMove) {
+            throw std::runtime_error("connection replacement publisher move failed");
+        }
+    }
+
+    void operator()(std::vector<ConnectionId> const &, std::vector<ConnectionId> const &) {}
+
+private:
+    bool _throwOnMove = false;
+};
+
+} // namespace TestGraphModelDetail
+
 /**
  * @brief A simple test implementation of AbstractGraphModel for unit testing.
  */
@@ -29,7 +72,9 @@ class TestGraphModel : public AbstractGraphModel
     Q_OBJECT
 
 public:
-    TestGraphModel() : AbstractGraphModel() {}
+    TestGraphModel()
+        : AbstractGraphModel()
+    {}
 
     NodeId newNodeId() override { return _nextNodeId++; }
 
@@ -65,16 +110,82 @@ public:
         return id;
     }
 
-    bool connectionPossible(ConnectionId const connectionId) const override
+    bool connectionPossible(ConnectionId const connectionId,
+                            std::vector<ConnectionId> const &replacedConnectionIds) const override
     {
+        bool const duplicate = connectionExists(connectionId)
+                               && std::find(replacedConnectionIds.begin(),
+                                            replacedConnectionIds.end(),
+                                            connectionId)
+                                      == replacedConnectionIds.end();
         // Basic validation: nodes exist and not connecting to self
         return nodeExists(connectionId.inNodeId) && nodeExists(connectionId.outNodeId)
-               && connectionId.inNodeId != connectionId.outNodeId;
+               && connectionId.inNodeId != connectionId.outNodeId && !duplicate;
+    }
+
+    [[nodiscard]] std::unique_ptr<QtNodes::ConnectionReplacementTransaction>
+    prepareConnectionReplacement(std::vector<ConnectionId> const &removedConnectionIds,
+                                 std::vector<ConnectionId> const &addedConnectionIds) noexcept override
+    {
+        try {
+            if (addedConnectionIds.size() != 1U) {
+                return {};
+            }
+            for (ConnectionId const connectionId : removedConnectionIds) {
+                if (!connectionExists(connectionId) || !detachPossible(connectionId)) {
+                    return {};
+                }
+            }
+            if (!connectionPossible(addedConnectionIds.front(), removedConnectionIds)) {
+                return {};
+            }
+
+            auto preparedIndex = _connection_index.preparedReplacement(removedConnectionIds,
+                                                                       addedConnectionIds);
+            if (!preparedIndex) {
+                return {};
+            }
+
+            if (_throwOnReplacementPublisherMove) {
+                using Publisher = TestGraphModelDetail::ThrowingMoveConnectionReplacementPublisher;
+                using Transaction = QtNodes::ConnectionIdIndexReplacementTransaction<Publisher>;
+                return std::make_unique<Transaction>(_connection_index,
+                                                     std::move(*preparedIndex),
+                                                     removedConnectionIds,
+                                                     addedConnectionIds,
+                                                     Publisher{});
+            }
+
+            auto publisher = [this](std::vector<ConnectionId> const &removedIds,
+                                    std::vector<ConnectionId> const &addedIds) {
+                for (ConnectionId const connectionId : removedIds) {
+                    TestGraphModelDetail::publishConnectionReplacementNotification(
+                        [&] { Q_EMIT connectionDeleted(connectionId); });
+                }
+                for (ConnectionId const connectionId : addedIds) {
+                    TestGraphModelDetail::publishConnectionReplacementNotification(
+                        [&] { Q_EMIT connectionCreated(connectionId); });
+                }
+            };
+            using Transaction = QtNodes::ConnectionIdIndexReplacementTransaction<decltype(publisher)>;
+            return std::make_unique<Transaction>(_connection_index,
+                                                 std::move(*preparedIndex),
+                                                 removedConnectionIds,
+                                                 addedConnectionIds,
+                                                 std::move(publisher));
+        } catch (...) {
+            return {};
+        }
+    }
+
+    void setThrowOnReplacementPublisherMove(bool enabled)
+    {
+        _throwOnReplacementPublisherMove = enabled;
     }
 
     void addConnection(ConnectionId const connectionId) override
     {
-        if (connectionPossible(connectionId)) {
+        if (connectionPossible(connectionId, {})) {
             _connection_index.add(connectionId);
             Q_EMIT connectionCreated(connectionId);
         }
@@ -94,28 +205,28 @@ public:
                 return roleIt->second;
             }
         }
-        
+
         // Provide default values for essential display properties
         switch (role) {
         case NodeRole::Type:
             return QString("TestNode");
-            
+
         case NodeRole::Caption:
             return QString("Test Node %1").arg(nodeId);
-            
+
         case NodeRole::CaptionVisible:
             return true;
-            
+
         case NodeRole::Size:
             return QSizeF(120, 80);
-            
+
         case NodeRole::Position:
             return QPointF(0, 0); // Default position if none set
-            
+
         default:
             break;
         }
-        
+
         return QVariant();
     }
 
@@ -126,7 +237,7 @@ public:
     {
         if (nodeExists(nodeId)) {
             _nodeData[nodeId][role] = value;
-            
+
             // Only emit specific signals for user-initiated changes
             // Don't emit for computed/internal roles to avoid recursion
             switch (role) {
@@ -265,4 +376,5 @@ private:
     NodeIdSet _nodeIds;
     QtNodes::ConnectionIdIndex _connection_index;
     std::unordered_map<NodeId, std::unordered_map<NodeRole, QVariant>> _nodeData;
+    bool _throwOnReplacementPublisherMove = false;
 };
