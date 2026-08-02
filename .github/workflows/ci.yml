@@ -31,6 +31,10 @@ jobs:
           - name: Windows / Qt 6.5.3
             os: windows-2022
             qt_version: "6.5.3"
+          - name: Windows / Qt 6.5.3 / CMake 3.21.7
+            os: windows-2022
+            qt_version: "6.5.3"
+            cmake_version: "3.21.7"
           - name: Windows / Qt 6.7.1
             os: windows-2022
             qt_version: "6.7.1"
@@ -58,11 +62,47 @@ jobs:
         with:
           arch: x64
 
+      - name: Install CMake floor
+        if: matrix.cmake_version != ''
+        shell: pwsh
+        run: |
+          $cmakeName = "cmake-${{ matrix.cmake_version }}-windows-x86_64"
+          $cmakeArchive = Join-Path $env:RUNNER_TEMP "$cmakeName.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/Kitware/CMake/releases/download/v${{ matrix.cmake_version }}/$cmakeName.zip" `
+            -OutFile $cmakeArchive
+          $actualHash = (Get-FileHash -Algorithm SHA256 $cmakeArchive).Hash
+          $expectedHash = "4C4840E2DC2BF82E8A16081FF506BBA54F3A228B91CE36317129FED4035EF2E3"
+          if ($actualHash -ne $expectedHash) {
+            throw "Unexpected CMake archive SHA256: $actualHash"
+          }
+          Expand-Archive $cmakeArchive -DestinationPath $env:RUNNER_TEMP
+          (Join-Path $env:RUNNER_TEMP "$cmakeName/bin") |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify CMake floor
+        if: matrix.cmake_version != ''
+        shell: pwsh
+        run: |
+          $expectedVersion = "cmake version ${{ matrix.cmake_version }}"
+          $actualVersion = cmake --version | Select-Object -First 1
+          if ($actualVersion -ne $expectedVersion) {
+            throw "Expected '$expectedVersion', got '$actualVersion'."
+          }
+          Write-Output $actualVersion
+
       - name: Configure
         run: >
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
           -DBUILD_DOCS=OFF
+
+      - name: Verify Windows test runtime PATH at CMake floor
+        if: runner.os == 'Windows' && matrix.cmake_version != ''
+        run: >
+          ctest --test-dir build -C Release
+          -R "^qt_nodes_test_runtime_path$"
+          --output-on-failure
 
       - name: Build
         run: cmake --build build --config Release --parallel
