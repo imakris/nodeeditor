@@ -8,6 +8,7 @@
 #include <QtNodes/internal/GraphicsView.hpp>
 #include <QtNodes/internal/GraphicsViewStyle.hpp>
 #include <QtNodes/internal/GroupGraphicsObject.hpp>
+#include <QtNodes/internal/NodeDelegateModel.hpp>
 #include <QtNodes/internal/NodeDelegateModelRegistry.hpp>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/NodeGroup.hpp>
@@ -32,6 +33,7 @@ using QtNodes::GraphicsViewStyle;
 using QtNodes::NodeDelegateModelRegistry;
 using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeId;
+using QtNodes::NodeProcessingStatus;
 using QtNodes::NodeStyle;
 using QtNodes::StyleCollection;
 
@@ -158,6 +160,18 @@ TEST_CASE("A delegate model without its own style follows the global default", "
         delegate->setNodeStyle(ownStyle);
 
         CHECK(delegate->nodeStyle().ConnectionPointDiameter == ownStyle.ConnectionPointDiameter);
+    }
+
+    SECTION("A status-icon call naming no icon does not install a style on the node")
+    {
+        delegate->setStatusIcon(NodeProcessingStatus::NoStatus, QPixmap());
+
+        NodeStyle laterDefault = styleGuard.saved();
+        laterDefault.ConnectionPointDiameter = styleGuard.saved().ConnectionPointDiameter * 5.0f;
+        StyleCollection::setNodeStyle(laterDefault);
+
+        CHECK(delegate->nodeStyle().ConnectionPointDiameter
+              == laterDefault.ConnectionPointDiameter);
     }
 }
 

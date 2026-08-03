@@ -141,6 +141,14 @@ void NodeDelegateModel::setStatusIcon(NodeProcessingStatus status, const QPixmap
     // QPixmap may not be used outside the GUI thread.
     Q_ASSERT(thread() == QThread::currentThread());
 
+    // NoStatus names no icon slot, so there is nothing to assign. Resolving the
+    // override before that is known would seed a per-node copy from whatever
+    // default is installed right now and stop the node from following later
+    // defaults, which is exactly what making the override optional avoided.
+    if (status == NodeProcessingStatus::NoStatus) {
+        return;
+    }
+
     NodeStyle &style = overriddenNodeStyle();
 
     switch (status) {
