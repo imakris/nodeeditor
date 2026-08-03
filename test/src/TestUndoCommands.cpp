@@ -17,17 +17,13 @@
 
 #include <catch2/catch.hpp>
 
-#include <QDialog>
 #include <QDir>
-#include <QFileDialog>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryFile>
 #include <QTest>
-#include <QTimer>
 #include <QUndoStack>
 
 #include <algorithm>
@@ -456,21 +452,7 @@ bool load_scene_document(DataFlowGraphicsScene &scene, QJsonObject const &sceneJ
     REQUIRE(file.write(QJsonDocument(sceneJson).toJson()) > 0);
     REQUIRE(file.flush());
 
-    QString const fileName = file.fileName();
-    bool selectedFile = false;
-    QTimer::singleShot(0, &scene, [&selectedFile, fileName] {
-        auto *dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
-        if (dialog) {
-            selectedFile = true;
-            dialog->setDirectory(QFileInfo(fileName).absolutePath());
-            dialog->selectFile(fileName);
-            static_cast<QDialog *>(dialog)->accept();
-        }
-    });
-
-    bool const loaded = scene.load();
-    REQUIRE(selectedFile);
-    return loaded;
+    return scene.loadFromFile(file.fileName());
 }
 
 QJsonObject save_scene_document(DataFlowGraphicsScene const &scene)
@@ -481,19 +463,7 @@ QJsonObject save_scene_document(DataFlowGraphicsScene const &scene)
     file.close();
     REQUIRE(file.remove());
 
-    bool selected_file = false;
-    QTimer::singleShot(0, &scene, [&selected_file, file_name] {
-        auto *dialog = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
-        if (dialog) {
-            selected_file = true;
-            dialog->setDirectory(QFileInfo(file_name).absolutePath());
-            dialog->selectFile(file_name);
-            static_cast<QDialog *>(dialog)->accept();
-        }
-    });
-
-    REQUIRE(scene.save());
-    REQUIRE(selected_file);
+    REQUIRE(scene.saveToFile(file_name));
 
     QFile saved_file(file_name);
     REQUIRE(saved_file.open(QIODevice::ReadOnly));
@@ -547,7 +517,6 @@ TEST_CASE("UndoStack integration with BasicGraphicsScene", "[undo]")
 
 TEST_CASE("Full document load retires the previous document history", "[undo][serialization]")
 {
-    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     auto app = applicationSetup();
     auto registry = create_undo_document_registry();
     DataFlowGraphModel model(registry);
@@ -611,7 +580,6 @@ TEST_CASE("Full document load retires the previous document history", "[undo][se
 
 TEST_CASE("Successful document load commits an empty undo stack", "[undo][serialization]")
 {
-    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     auto app = applicationSetup();
     auto registry = create_undo_document_registry();
     DataFlowGraphModel model(registry);
@@ -679,7 +647,6 @@ TEST_CASE("Successful document load commits an empty undo stack", "[undo][serial
 
 TEST_CASE("Rejected document load preserves graph and history", "[undo][serialization]")
 {
-    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     auto app = applicationSetup();
     auto registry = create_undo_document_registry();
     DataFlowGraphModel model(registry);
@@ -726,7 +693,6 @@ TEST_CASE("Rejected document load preserves graph and history", "[undo][serializ
 
 TEST_CASE("Full document group membership is unique and atomic", "[undo][serialization][node-group]")
 {
-    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     auto app = applicationSetup();
     auto registry = create_undo_document_registry();
     DataFlowGraphModel model(registry);
@@ -841,7 +807,6 @@ TEST_CASE("Full document group membership is unique and atomic", "[undo][seriali
 
 TEST_CASE("Full document load preserves disjoint group state", "[serialization][node-group]")
 {
-    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
     auto app = applicationSetup();
     auto registry = create_undo_document_registry();
     DataFlowGraphModel model(registry);

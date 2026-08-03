@@ -4,6 +4,8 @@
 #include "DataFlowGraphModel.hpp"
 #include "Export.hpp"
 
+#include <QtCore/QString>
+
 namespace QtNodes {
 
 /**
@@ -24,8 +26,17 @@ public:
     QMenu *createSceneMenu(QPointF const scenePos) override;
     void updateConnectionGraphics(const std::unordered_set<ConnectionId> &connections, bool state);
 
+    /// Writes the scene to @a fileName verbatim, without asking the user.
+    bool saveToFile(QString const &fileName) const;
+
+    /// Replaces the scene with the document in @a fileName, without asking the user.
+    bool loadFromFile(QString const &fileName);
+
 public Q_SLOTS:
+    /// Asks the user for a destination, then delegates to saveToFile().
     bool save() const;
+
+    /// Asks the user for a document, then delegates to loadFromFile().
     bool load();
 
 Q_SIGNALS:

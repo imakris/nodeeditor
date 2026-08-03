@@ -327,32 +327,47 @@ QMenu *DataFlowGraphicsScene::createSceneMenu(QPointF const scenePos)
 bool DataFlowGraphicsScene::save() const
 {
     QString fileName = QFileDialog::getSaveFileName(nullptr,
-                                                    tr("Open Flow Scene"),
+                                                    tr("Save Flow Scene"),
                                                     QDir::homePath(),
                                                     tr("Flow Scene Files (*.flow)"));
 
-    if (!fileName.isEmpty()) {
-        if (!fileName.endsWith("flow", Qt::CaseInsensitive))
-            fileName += ".flow";
+    if (fileName.isEmpty())
+        return false;
 
-        QFile file(fileName);
-        if (file.open(QIODevice::WriteOnly)) {
-            QJsonObject sceneJson = scene_json_with_groups(_graphModel, *this);
+    // Suffix completion belongs to the chooser: a caller that names a path
+    // explicitly gets that path written verbatim.
+    if (!fileName.endsWith("flow", Qt::CaseInsensitive))
+        fileName += ".flow";
 
-            file.write(QJsonDocument(sceneJson).toJson());
-            return true;
-        }
-    }
-    return false;
+    return saveToFile(fileName);
 }
 
 bool DataFlowGraphicsScene::load()
 {
-    QString fileName = QFileDialog::getOpenFileName(nullptr,
-                                                    tr("Open Flow Scene"),
-                                                    QDir::homePath(),
-                                                    tr("Flow Scene Files (*.flow)"));
+    QString const fileName = QFileDialog::getOpenFileName(nullptr,
+                                                          tr("Open Flow Scene"),
+                                                          QDir::homePath(),
+                                                          tr("Flow Scene Files (*.flow)"));
 
+    return loadFromFile(fileName);
+}
+
+bool DataFlowGraphicsScene::saveToFile(QString const &fileName) const
+{
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+
+    QJsonObject const sceneJson = scene_json_with_groups(_graphModel, *this);
+    QByteArray const payload = QJsonDocument(sceneJson).toJson();
+
+    // A short write leaves a truncated document that parses as a smaller graph,
+    // so the caller must not be told the save succeeded.
+    return file.write(payload) == payload.size() && file.flush();
+}
+
+bool DataFlowGraphicsScene::loadFromFile(QString const &fileName)
+{
     if (!QFileInfo::exists(fileName))
         return false;
 
