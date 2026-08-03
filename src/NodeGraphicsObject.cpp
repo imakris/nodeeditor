@@ -81,15 +81,15 @@ NodeGraphicsObject::NodeGraphicsObject(BasicGraphicsScene &scene, NodeId nodeId)
 
     setCacheMode(initial_cache_mode(scene));
 
-    applyNodeStyle();
-
     setAcceptHoverEvents(true);
 
     setZValue(0);
 
     embedQWidget();
 
-    nodeScene()->nodeGeometry().recomputeSize(_nodeId);
+    // After the widget is embedded, because the size this recomputes has to
+    // account for the widget the node ended up holding.
+    applyNodeStyle();
 
     QPointF const pos = _graphModel.nodeData<QPointF>(_nodeId, NodeRole::Position);
 
@@ -178,11 +178,6 @@ QRectF NodeGraphicsObject::boundingRect() const
     return geometry.boundingRect(_nodeId);
 }
 
-void NodeGraphicsObject::setGeometryChanged()
-{
-    prepareGeometryChange();
-}
-
 void NodeGraphicsObject::applyNodeStyle()
 {
     // The bounding rect grows by the shadow margins the style asks for, so the
@@ -196,17 +191,14 @@ void NodeGraphicsObject::applyNodeStyle()
 
     setOpacity(nodeStyle.Opacity);
 
+    // The geometries widen the node for a non-null style.titleIcon and store
+    // that width as NodeRole::Size instead of resolving it per paint, so a
+    // style that introduces a title icon would otherwise draw the wider icon
+    // inside the width the previous style gave the node.
+    nodeScene()->nodeGeometry().recomputeSize(_nodeId);
+
     // Every other field of the style is read by the painter, and the node draws
     // from a cached pixmap until it is invalidated.
-    //
-    // One field is not fully carried by this: the geometries widen the node for
-    // a non-null style.titleIcon, and that width is stored as NodeRole::Size
-    // rather than resolved per paint, so an install that introduces a title icon
-    // draws the wider icon inside the old width. Recomputing the size here is
-    // not a local fix. It writes model data, so it can re-enter through
-    // onNodeUpdated, and the same staleness already exists for
-    // NodeDelegateModel::setNodeStyle and for setNodeData(NodeRole::Style). All
-    // three want one "the node's style changed" entry point instead.
     update();
 }
 

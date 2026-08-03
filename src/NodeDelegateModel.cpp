@@ -98,6 +98,11 @@ void NodeDelegateModel::setNodeStyle(NodeStyle const &style)
 
     _nodeStyle = style;
     _processingStatusIconDirty = true;
+
+    // The node's own style is style-derived geometry as much as an installed
+    // default is, so it has to reach the graphics object the same way. The
+    // scene's node-updated handler is the entry point that re-resolves it.
+    Q_EMIT requestNodeUpdate();
 }
 
 QImage NodeDelegateModel::processingStatusImage(qreal dpr) const

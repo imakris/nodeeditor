@@ -50,18 +50,26 @@ public:
 
     QRectF boundingRect() const override;
 
-    void setGeometryChanged();
-
     /**
-     * Re-resolves the node's style and applies the parts the item holds itself.
+     * The single "the node's style changed" entry point.
      *
-     * Opacity is item state rather than something the painter reads per paint,
-     * so it has to be re-applied whenever the resolved style can have changed.
-     * The item is also invalidated, because its bounding rect follows the
-     * style's shadow margins and, under the Crisp rasterization policy, it
-     * renders from a device-coordinate cache that would otherwise serve the
-     * pixmap it painted from the previous style.
-     * Called at construction and whenever a new default style is installed.
+     * Re-resolves the node's style and applies every part of it that is not
+     * read back per paint:
+     *
+     * - Opacity is item state, so it has to be re-applied.
+     * - The stored NodeRole::Size is style-derived, because the geometries
+     *   widen the node for a non-null style.titleIcon, so it has to be
+     *   recomputed.
+     * - The item is invalidated, because its bounding rect follows the style's
+     *   shadow margins and, under the Crisp rasterization policy, it renders
+     *   from a device-coordinate cache that would otherwise serve the pixmap it
+     *   painted from the previous style.
+     *
+     * Called at construction, whenever a new default style is installed, and
+     * from the scene's node-updated handler, which is where a per-node install
+     * arrives: NodeDelegateModel::setNodeStyle for the in-tree model, and
+     * setNodeData(NodeRole::Style) for a model that both stores that role and
+     * signals nodeUpdated for it, which DataFlowGraphModel does not.
      */
     void applyNodeStyle();
 

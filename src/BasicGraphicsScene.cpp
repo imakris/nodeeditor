@@ -294,11 +294,19 @@ void BasicGraphicsScene::applyStyleDefaults()
         nodeEntry.second->applyNodeStyle();
     }
 
+    // An installed default moves the node sizes, because the geometries widen a
+    // node for a non-null style.titleIcon, and the out ports sit on that width.
+    // A connection stores its endpoints rather than resolving them per paint, so
+    // nothing else would pull them back onto the ports they connect. Every node
+    // is styled before any endpoint is re-derived, because a connection spans
+    // two of them.
     for (auto &connectionEntry : _connectionGraphicsObjects) {
+        connectionEntry.second->move();
         connectionEntry.second->applyConnectionStyle();
     }
 
     if (_draftConnection) {
+        _draftConnection->move();
         _draftConnection->applyConnectionStyle();
     }
 
@@ -430,16 +438,17 @@ void BasicGraphicsScene::onNodeUpdated(NodeId const nodeId)
     auto node = nodeGraphicsObject(nodeId);
 
     if (node) {
-        node->setGeometryChanged();
-
-        _nodeGeometry->recomputeSize(nodeId);
+        // A node update carries a style change too, because that is how a
+        // per-node install reaches the scene, so it goes through the same entry
+        // point an installed default does. It already covers the geometry
+        // change, the size recomputation and the repaint.
+        node->applyNodeStyle();
 
         node->updateValidationTooltip();
         if (auto group = node->nodeGroup().lock()) {
             group->groupGraphicsObject().updateGroupGeometry();
         }
         node->updateQWidgetEmbedPos();
-        node->update();
         node->moveConnections();
     }
 }

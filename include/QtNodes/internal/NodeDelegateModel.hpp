@@ -122,7 +122,10 @@ public:
      */
     NodeStyle const &nodeStyle() const;
 
-    /// Installs a style that overrides the StyleCollection default for this node only.
+    /**
+     * Installs a style that overrides the StyleCollection default for this node
+     * only, and asks the scene to re-resolve what it holds from the style.
+     */
     void setNodeStyle(NodeStyle const &style);
 
     /// Convenience helper to change the node background color.

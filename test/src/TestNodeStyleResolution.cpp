@@ -3,7 +3,9 @@
 
 #include <catch2/catch.hpp>
 
+#include <QtNodes/internal/AbstractNodeGeometry.hpp>
 #include <QtNodes/internal/BasicGraphicsScene.hpp>
+#include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/DataFlowGraphModel.hpp>
 #include <QtNodes/internal/GraphicsView.hpp>
 #include <QtNodes/internal/GraphicsViewStyle.hpp>
@@ -16,28 +18,85 @@
 #include <QtNodes/internal/StyleCollection.hpp>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QPointF>
 #include <QtCore/QRectF>
+#include <QtCore/QSize>
 #include <QtGui/QColor>
+#include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
 #include <QtTest/QSignalSpy>
 #include <QtWidgets/QGraphicsItem>
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
 using QtNodes::BasicGraphicsScene;
+using QtNodes::ConnectionId;
 using QtNodes::DataFlowGraphModel;
 using QtNodes::GraphicsView;
 using QtNodes::GraphicsViewStyle;
+using QtNodes::NodeDelegateModel;
 using QtNodes::NodeDelegateModelRegistry;
 using QtNodes::NodeGraphicsObject;
 using QtNodes::NodeId;
 using QtNodes::NodeProcessingStatus;
+using QtNodes::NodeRole;
 using QtNodes::NodeStyle;
 using QtNodes::StyleCollection;
 
 namespace {
+
+/**
+ * A node with no ports and no embedded widget, so its width is driven by its
+ * caption alone. That is the width a title icon widens, and a node whose ports
+ * or embedded widget already make it wider would not move at all.
+ */
+class CaptionOnlyNode : public NodeDelegateModel
+{
+public:
+    static QString Name() { return QStringLiteral("CaptionOnlyNode"); }
+
+    QString name() const override { return Name(); }
+
+    QString caption() const override { return QStringLiteral("Caption Only"); }
+
+    unsigned int nPorts(PortType) const override { return 0; }
+
+    NodeDataType dataType(PortType, PortIndex) const override { return NodeDataType{}; }
+
+    void setInData(std::shared_ptr<NodeData>, PortIndex const) override {}
+
+    std::shared_ptr<NodeData> outData(PortIndex const) override { return nullptr; }
+
+    QWidget *embeddedWidget() override { return nullptr; }
+};
+
+/**
+ * A caption-driven node that can be connected: one port per side, no port
+ * captions and no embedded widget, so nothing but the caption drives its width.
+ * The out port sits on that width, so a title icon moves the port too.
+ */
+class CaptionOnlyPortNode : public NodeDelegateModel
+{
+public:
+    static QString Name() { return QStringLiteral("CaptionOnlyPortNode"); }
+
+    QString name() const override { return Name(); }
+
+    QString caption() const override { return QStringLiteral("Caption Only With Ports"); }
+
+    unsigned int nPorts(PortType) const override { return 1; }
+
+    NodeDataType dataType(PortType, PortIndex) const override { return NodeDataType{}; }
+
+    void setInData(std::shared_ptr<NodeData>, PortIndex const) override {}
+
+    std::shared_ptr<NodeData> outData(PortIndex const) override { return nullptr; }
+
+    QWidget *embeddedWidget() override { return nullptr; }
+};
 
 /// Restores the process-wide default so one test cannot leak a style into the next.
 class DefaultNodeStyleGuard
@@ -97,7 +156,24 @@ std::shared_ptr<NodeDelegateModelRegistry> makeStyleTestRegistry()
 {
     auto registry = std::make_shared<NodeDelegateModelRegistry>();
     registry->registerModel<TestDisplayNode>();
+    registry->registerModel<CaptionOnlyNode>();
+    registry->registerModel<CaptionOnlyPortNode>();
     return registry;
+}
+
+/// The width and height the model stores for the node, which is what the
+/// geometries write and every painter and hit test reads back.
+QSize storedNodeSize(DataFlowGraphModel const &model, NodeId nodeId)
+{
+    return model.nodeData(nodeId, NodeRole::Size).value<QSize>();
+}
+
+QIcon makeTitleIcon()
+{
+    QPixmap pixmap(16, 16);
+    pixmap.fill(QColor(200, 120, 40));
+
+    return QIcon(pixmap);
 }
 
 /// Counts the pixels two same-sized grabs disagree on. A negative result means
@@ -290,6 +366,144 @@ TEST_CASE("An install invalidates the pixmap a cached node renders from", "[styl
     QImage const after = view.grab().toImage();
 
     CHECK(differingPixelCount(before, after) > 0);
+}
+
+// A title icon is style-derived geometry, not only style-derived paint: the
+// geometries widen the node for a non-null style.titleIcon and store that width
+// as NodeRole::Size instead of resolving it per paint. So the promise that an
+// installed default reaches every object that carries no style of its own
+// (docs/guide/styling.rst) is a promise about the node's size too.
+TEST_CASE("An installed title icon reaches the size of a node that already exists",
+          "[style][graphics]")
+{
+    auto app = applicationSetup();
+
+    DefaultNodeStyleGuard styleGuard;
+
+    auto registry = makeStyleTestRegistry();
+    DataFlowGraphModel model(registry);
+    BasicGraphicsScene scene(model);
+
+    NodeId const existingNode = model.addNode(CaptionOnlyNode::Name());
+    REQUIRE(existingNode != QtNodes::InvalidNodeId);
+
+    QSize const sizeBeforeInstall = storedNodeSize(model, existingNode);
+    REQUIRE(sizeBeforeInstall.width() > 0);
+
+    NodeStyle installedDefault = styleGuard.saved();
+    installedDefault.titleIcon = makeTitleIcon();
+    REQUIRE(!installedDefault.titleIcon.isNull());
+
+    StyleCollection::setNodeStyle(installedDefault);
+    settleQueuedSceneUpdates();
+
+    NodeId const laterNode = model.addNode(CaptionOnlyNode::Name());
+    REQUIRE(laterNode != QtNodes::InvalidNodeId);
+
+    QSize const laterNodeSize = storedNodeSize(model, laterNode);
+
+    // Precondition, not the behaviour under test: the title icon has to widen
+    // this node at all, or following it would say nothing.
+    REQUIRE(laterNodeSize.width() > sizeBeforeInstall.width());
+
+    // The two nodes differ only in when they were created, so the documented
+    // promise is that they end up the same size.
+    CHECK(storedNodeSize(model, existingNode) == laterNodeSize);
+}
+
+// The per-node entry point carries the same geometry, and it reaches the scene
+// through the same "the node's style changed" path the installed default does.
+// It has to stay per-node while doing so: a style installed on one node is the
+// one thing that must not travel to the nodes that carry none.
+TEST_CASE("A title icon installed on one node reaches that node only", "[style][graphics]")
+{
+    auto app = applicationSetup();
+
+    auto registry = makeStyleTestRegistry();
+    DataFlowGraphModel model(registry);
+    BasicGraphicsScene scene(model);
+
+    NodeId const styledNode = model.addNode(CaptionOnlyNode::Name());
+    NodeId const plainNode = model.addNode(CaptionOnlyNode::Name());
+    REQUIRE(styledNode != QtNodes::InvalidNodeId);
+    REQUIRE(plainNode != QtNodes::InvalidNodeId);
+
+    QSize const unstyledSize = storedNodeSize(model, styledNode);
+    REQUIRE(storedNodeSize(model, plainNode) == unstyledSize);
+
+    auto *delegate = model.delegateModel<CaptionOnlyNode>(styledNode);
+    REQUIRE(delegate != nullptr);
+
+    NodeStyle ownStyle = StyleCollection::nodeStyle();
+    ownStyle.titleIcon = makeTitleIcon();
+    delegate->setNodeStyle(ownStyle);
+    settleQueuedSceneUpdates();
+
+    CHECK(storedNodeSize(model, styledNode).width() > unstyledSize.width());
+    CHECK(storedNodeSize(model, plainNode) == unstyledSize);
+}
+
+// The size an installed default moves is what the port positions are derived
+// from, and a connection stores its endpoints rather than resolving them per
+// paint. So the promise that an installed default reaches every object carrying
+// no style of its own reaches the connections between the nodes it resizes:
+// otherwise they stay attached to where the ports used to be.
+TEST_CASE("An installed title icon carries the connections of the nodes it widens",
+          "[style][graphics]")
+{
+    auto app = applicationSetup();
+
+    DefaultNodeStyleGuard styleGuard;
+
+    auto registry = makeStyleTestRegistry();
+    DataFlowGraphModel model(registry);
+    BasicGraphicsScene scene(model);
+
+    NodeId const sourceNode = model.addNode(CaptionOnlyPortNode::Name());
+    NodeId const targetNode = model.addNode(CaptionOnlyPortNode::Name());
+    REQUIRE(sourceNode != QtNodes::InvalidNodeId);
+    REQUIRE(targetNode != QtNodes::InvalidNodeId);
+
+    model.setNodeData(targetNode, NodeRole::Position, QPointF(400.0, 120.0));
+
+    ConnectionId const connectionId{sourceNode, 0, targetNode, 0};
+    model.addConnection(connectionId);
+
+    auto *connection = scene.connectionGraphicsObject(connectionId);
+    REQUIRE(connection != nullptr);
+
+    QSize const sizeBeforeInstall = storedNodeSize(model, sourceNode);
+
+    NodeStyle installedDefault = styleGuard.saved();
+    installedDefault.titleIcon = makeTitleIcon();
+
+    StyleCollection::setNodeStyle(installedDefault);
+    settleQueuedSceneUpdates();
+
+    // Precondition, not the behaviour under test: the install has to move the
+    // width the out port sits on, or a stale endpoint could not be told apart
+    // from a correct one.
+    REQUIRE(storedNodeSize(model, sourceNode).width() > sizeBeforeInstall.width());
+
+    auto *sourceObject = scene.nodeGraphicsObject(sourceNode);
+    REQUIRE(sourceObject != nullptr);
+
+    QPointF const outPortScenePosition
+        = scene.nodeGeometry().portScenePosition(sourceNode,
+                                                 PortType::Out,
+                                                 0,
+                                                 sourceObject->sceneTransform());
+    QPointF const outEndPointInScene
+        = connection->sceneTransform().map(connection->endPoint(PortType::Out));
+
+    // The endpoint and the port position are the same quantity reached through
+    // two transforms, so they agree to well within a pixel when the endpoint
+    // followed the install. A stale one sits a whole title-icon overhead away.
+    constexpr double endPointTolerance = 0.5;
+
+    QPointF const drift = outEndPointInScene - outPortScenePosition;
+
+    CHECK(std::hypot(drift.x(), drift.y()) < endPointTolerance);
 }
 
 // A group frame paints from its own constants, but the rect it paints into is
