@@ -40,11 +40,11 @@ public:
 
 public:
     /**
-   * @brief Prepares a byte array containing this group's data to  be saved in a
-   * file.
+   * @brief Serializes this group's data. Nothing is written to disk: the
+   * caller decides what to do with the bytes.
    * @return A byte array containing this group's data (in JSON format).
    */
-    QByteArray saveToFile() const;
+    QByteArray serialized() const;
 
     /**
    * @brief Returns this group's identifier.

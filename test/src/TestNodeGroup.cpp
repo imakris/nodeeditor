@@ -395,7 +395,7 @@ TEST_CASE("Saving and restoring node groups", "[node-group]")
         model.addConnection(connection);
         QCoreApplication::processEvents();
 
-        auto groupJson = QJsonDocument::fromJson(group->saveToFile()).object();
+        auto groupJson = QJsonDocument::fromJson(group->serialized()).object();
         CHECK(groupJson["name"].toString() == QStringLiteral("SerializableGroup"));
         CHECK(static_cast<GroupId>(groupJson["id"].toInt()) == group->id());
 
@@ -440,7 +440,7 @@ TEST_CASE("Saving and restoring node groups", "[node-group]")
         model.addConnection(connection);
         QCoreApplication::processEvents();
 
-        auto groupJson = QJsonDocument::fromJson(group->saveToFile()).object();
+        auto groupJson = QJsonDocument::fromJson(group->serialized()).object();
 
         auto newRegistry = createDummyRegistry();
         DataFlowGraphModel newModel(newRegistry);

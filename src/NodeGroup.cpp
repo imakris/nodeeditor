@@ -30,7 +30,7 @@ NodeGroup::NodeGroup(std::vector<NodeGraphicsObject *> nodes,
 
 NodeGroup::~NodeGroup() = default;
 
-QByteArray NodeGroup::saveToFile() const
+QByteArray NodeGroup::serialized() const
 {
     QJsonObject groupJson;
 

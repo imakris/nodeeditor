@@ -320,7 +320,7 @@ void BasicGraphicsScene::saveGroupFile(GroupId groupID)
 
     QFile file(fileName);
     if (file.open(QIODevice::WriteOnly)) {
-        file.write(groupIt->second->saveToFile());
+        file.write(groupIt->second->serialized());
     } else {
         qDebug() << "Error saving group file!";
     }
