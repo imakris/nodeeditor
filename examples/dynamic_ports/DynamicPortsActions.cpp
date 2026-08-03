@@ -57,7 +57,7 @@ QMenuBar *create_save_restore_menu(DynamicPortsModel &graph_model,
 
     QObject::connect(save_action, &QAction::triggered, &scene, [&graph_model] {
         QString file_name = QFileDialog::getSaveFileName(nullptr,
-                                                         "Open Flow Scene",
+                                                         "Save Flow Scene",
                                                          QDir::homePath(),
                                                          "Flow Scene Files (*.flow)");
 
