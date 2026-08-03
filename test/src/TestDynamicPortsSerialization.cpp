@@ -733,7 +733,11 @@ TEST_CASE("Dynamic ports resource boundaries remain reloadable", "[serialization
         DynamicPortsModel model;
         REQUIRE(model.load(QJsonObject{{"nodes", nodes}, {"connections", QJsonArray{}}}));
         CHECK(model.allNodeIds().size() == DynamicPortsModel::s_max_serialized_nodes);
-        CHECK_THROWS_AS(model.addNode(), std::length_error);
+        model_signal_counts_t counts;
+        count_model_signals(model, counts);
+        CHECK(model.addNode() == InvalidNodeId);
+        CHECK(model.allNodeIds().size() == DynamicPortsModel::s_max_serialized_nodes);
+        CHECK(counts.sequence.empty());
     }
 
     SECTION("per-node port boundary")
@@ -754,6 +758,27 @@ TEST_CASE("Dynamic ports resource boundaries remain reloadable", "[serialization
         DynamicPortsModel round_trip;
         REQUIRE(round_trip.load(before));
     }
+}
+
+TEST_CASE("Dynamic ports connection admission refuses without mutation",
+          "[serialization][dynamic-ports]")
+{
+    auto app = applicationSetup();
+    DynamicPortsModel model;
+    populate_existing_graph(model);
+    QJsonObject const before = model.save();
+    model_signal_counts_t counts;
+    count_model_signals(model, counts);
+
+    // The fixture gives both nodes exactly one port per direction and already
+    // connects the only admissible pair, so port index 1 names a port that does
+    // not exist and the third call repeats an existing connection.
+    model.addConnection(ConnectionId{0, 1, 1, 0});
+    model.addConnection(ConnectionId{0, 0, 1, 1});
+    model.addConnection(ConnectionId{0, 0, 1, 0});
+
+    CHECK(model.save() == before);
+    CHECK(counts.sequence.empty());
 }
 
 TEST_CASE("Dynamic ports allocator never exposes reserved ids", "[serialization][dynamic-ports]")

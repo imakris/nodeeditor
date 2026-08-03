@@ -64,6 +64,11 @@ public:
 
     bool connectionExists(ConnectionId const connectionId) const override;
 
+    /// Refuses over the node budget by returning `InvalidNodeId`, which is the
+    /// refusal value the scene's create-node command already acts on. Propagates
+    /// `std::overflow_error` out of `newNodeId()` when the id space is spent,
+    /// which the budget alone cannot rule out because a loaded graph may already
+    /// name the last allocatable id.
     NodeId addNode(QString const nodeType = QString()) override;
 
     /// Adds and positions one UI-created node, returning false on expected refusal.
@@ -81,6 +86,10 @@ public:
         std::vector<ConnectionId> const &removedConnectionIds,
         std::vector<ConnectionId> const &addedConnectionIds) noexcept override;
 
+    /// Refuses a connection the graph limits or the current port layout do not
+    /// admit by leaving topology untouched and emitting nothing. The framework
+    /// drives this from port-shift replay and from undo commands, neither of
+    /// which can unwind an exception thrown mid-sequence.
     void addConnection(ConnectionId const connectionId) override;
 
     bool nodeExists(NodeId const nodeId) const override;
@@ -124,6 +133,9 @@ public:
 
     void removePort(NodeId nodeId, PortType portType, PortIndex first);
 
+    /// Throws `std::overflow_error` once the id space is exhausted, as
+    /// DataFlowGraphModel does: an allocator that has run out has no in-band
+    /// value left to report with, since every id including the sentinel is spent.
     NodeId newNodeId() override;
 
 private:

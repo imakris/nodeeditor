@@ -252,7 +252,7 @@ NodeId DynamicPortsModel::addNode(QString const nodeType)
     Q_UNUSED(nodeType);
 
     if (_nodeIds.size() >= s_max_serialized_nodes) {
-        throw std::length_error("Dynamic-ports node resource limit reached");
+        return InvalidNodeId;
     }
 
     NodeId newId = newNodeId();
@@ -399,7 +399,7 @@ void DynamicPortsModel::addConnection(ConnectionId const connectionId)
         || connectionId.outPortIndex >= out_count->second.out
         || connectionId.inPortIndex >= in_count->second.in
         || !connectionPossible(connectionId, {})) {
-        throw std::logic_error("Invalid dynamic-ports connection");
+        return;
     }
 
     _connectionIndex.add(connectionId);
