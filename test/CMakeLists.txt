@@ -46,10 +46,15 @@ target_link_libraries(test_nodes
     Qt6::Test
 )
 
+# Catch2 prints a case's timing line when the case finishes, so a run killed by
+# the budget below ends at the last case that completed and the suspect is the
+# next one in declaration order. That is still the only handle a remote runner
+# gives us: without it the budget reports a bare timeout naming nothing.
 add_test(
   NAME test_nodes
   COMMAND
     $<TARGET_FILE:test_nodes>
+    --durations yes
     $<$<BOOL:${QT_NODES_FORCE_TEST_COLOR}>:--use-colour=yes>
 )
 
