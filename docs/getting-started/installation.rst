@@ -4,8 +4,8 @@ Installation
 Requirements
 ------------
 
-- **Qt** 6.5 or newer
-- **CMake** 3.21 or newer
+- **Qt** 6.12 or newer
+- **CMake** 3.25 or newer
 - **C++ Compiler** with C++17 support (GCC 7+, Clang 5+, MSVC 2019+)
 - **Catch2** (optional, for running tests)
 

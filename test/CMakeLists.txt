@@ -1,4 +1,4 @@
-find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Test)
 
 add_executable(test_nodes
   test_main.cpp

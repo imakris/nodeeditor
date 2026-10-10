@@ -29,7 +29,7 @@ without any scene or view. This is called "headless mode."
 
 **Which Qt version does QtNodes support?**
 
-QtNodes requires Qt 6.5 or newer.
+QtNodes requires Qt 6.12 or newer.
 
 Common Issues
 -------------

@@ -45,7 +45,7 @@ endif()
 
 add_subdirectory(external)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets Gui)
+find_package(Qt6 6.12 REQUIRED COMPONENTS Core Widgets Gui)
 message(STATUS "QT_VERSION: ${QT_VERSION}, QT_DIR: ${QT_DIR}")
 
 include(FetchContent)

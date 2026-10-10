@@ -62,16 +62,16 @@ Supported Environments
 Platforms
 ---------
 
-* Linux (x64, gcc, Qt 6.5+)
-* OSX (Apple Clang, Qt 6.7.1)
-* Windows (MSVC, Qt 6.5+)
+* Linux (x64, gcc, Qt 6.12+)
+* OSX (Apple Clang, Qt 6.12+)
+* Windows (MSVC, Qt 6.12+)
 
 
 Dependencies
 ------------
 
-* Qt 6.5 or newer
-* CMake 3.21 or newer
+* Qt 6.12 or newer
+* CMake 3.25 or newer
 * Catch2
 
 
@@ -101,7 +101,7 @@ Current State (v3)
 Building
 ========
 
-QtNodes requires Qt 6.5 or newer. Configure with the desired Qt 6 installation
+QtNodes requires Qt 6.12 or newer. Configure with the desired Qt 6 installation
 available through ``Qt6_DIR`` or ``CMAKE_PREFIX_PATH``.
 
 For building a static lib use:

@@ -207,8 +207,8 @@ Tests are built automatically when ``BUILD_TESTING`` is enabled (default).
 
 **Prerequisites:**
   - Catch2 testing framework
-  - Qt 6.5 or newer
-  - CMake 3.21+
+  - Qt 6.12 or newer
+  - CMake 3.25+
 
 **Configuration:**
 
