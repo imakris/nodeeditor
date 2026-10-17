@@ -10,6 +10,7 @@
 #include "selection_utils.hpp"
 
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <QtCore/QDebug>
@@ -142,7 +143,8 @@ static QJsonObject serializeSelectedItems(BasicGraphicsScene *scene)
 
 static void insertSerializedItems(QJsonObject const &json,
                                   BasicGraphicsScene *scene,
-                                  std::vector<NodeId> *insertedNodeIds = nullptr)
+                                  std::vector<NodeId> *insertedNodeIds = nullptr,
+                                  bool restoreGroupIdentity = false)
 {
     AbstractGraphModel &graphModel = scene->graphModel();
 
@@ -198,7 +200,19 @@ static void insertSerializedItems(QJsonObject const &json,
                 }
             }
 
-            auto const groupWeak = scene->createGroup(groupNodes, name);
+            // Delete/undo can restore individual members of a surviving group.
+            // Copy/paste continues to create a new group with a fresh identity.
+            GroupId groupId = InvalidGroupId;
+            if (restoreGroupIdentity && !detail::read_group_id(groupJson["id"], groupId)) {
+                throw std::logic_error("Invalid group id in serialized command payload");
+            }
+            if (restoreGroupIdentity && scene->groups().count(groupId) != 0) {
+                for (auto *node : groupNodes) {
+                    scene->addNodeToGroup(node->nodeId(), groupId);
+                }
+                continue;
+            }
+            auto const groupWeak = scene->createGroup(groupNodes, name, groupId);
             if (auto group = groupWeak.lock()) {
                 group->groupGraphicsObject().lock(groupJson["locked"].toBool(true));
             }
@@ -303,7 +317,9 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
     // Delete the nodes; this will delete many of the connections.
     // Selected connections were already deleted prior to this loop,
 
+    QJsonArray groupsJsonArray;
     std::unordered_set<NodeId> processedNodes;
+    std::unordered_map<GroupId, qsizetype> groupIndices;
 
     auto appendNode = [&](NodeGraphicsObject *node) {
         if (!node)
@@ -318,27 +334,34 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
         }
 
         nodesJsonArray.append(graphModel.saveNode(node->nodeId()));
+
+        // Capture membership for every deleted node, even when only a child
+        // of an unlocked group is selected. Do not serialize unselected nodes
+        // into the deletion set merely to remember their shared group.
+        if (auto group = node->nodeGroup().lock()) {
+            auto const groupInserted = groupIndices.emplace(group->id(), groupsJsonArray.size());
+            if (groupInserted.second) {
+                QJsonObject groupJson;
+                groupJson["id"] = static_cast<qint64>(group->id());
+                groupJson["name"] = group->name();
+                groupJson["locked"] = group->groupGraphicsObject().locked();
+                groupJson["nodes"] = QJsonArray{};
+                groupsJsonArray.append(groupJson);
+            }
+            const qsizetype index = groupInserted.first->second;
+            auto groupJson = groupsJsonArray[index].toObject();
+            auto memberIds = groupJson["nodes"].toArray();
+            memberIds.append(static_cast<qint64>(node->nodeId()));
+            groupJson["nodes"] = memberIds;
+            groupsJsonArray[index] = groupJson;
+        }
     };
 
-    QJsonArray groupsJsonArray;
-
     detail::for_each_selected<GroupGraphicsObject>(_scene, [&](GroupGraphicsObject *groupGo) {
-        auto &groupData = groupGo->group();
-
-        QJsonArray groupNodeIdsJsonArray;
-        for (NodeGraphicsObject *node : groupData.childNodes()) {
+        for (auto *node : groupGo->group().childNodes()) {
             appendNode(node);
-            groupNodeIdsJsonArray.append(static_cast<qint64>(node->nodeId()));
         }
-
-        QJsonObject groupJson;
-        groupJson["id"] = static_cast<qint64>(groupData.id());
-        groupJson["name"] = groupData.name();
-        groupJson["locked"] = groupGo->locked();
-        groupJson["nodes"] = groupNodeIdsJsonArray;
-        groupsJsonArray.append(groupJson);
     });
-
     detail::for_each_selected<NodeGraphicsObject>(_scene, appendNode);
 
     // If nothing is deleted, cancel this operation
@@ -352,7 +375,7 @@ DeleteCommand::DeleteCommand(BasicGraphicsScene *scene)
 
 void DeleteCommand::undo()
 {
-    insertSerializedItems(_sceneJson, _scene);
+    insertSerializedItems(_sceneJson, _scene, nullptr, true);
 }
 
 void DeleteCommand::redo()

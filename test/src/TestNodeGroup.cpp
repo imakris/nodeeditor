@@ -7,6 +7,8 @@
 #include <QtNodes/NodeDelegateModelRegistry>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/NodeGroup.hpp>
+#include <QtNodes/internal/GroupGraphicsObject.hpp>
+#include <QtNodes/UndoCommands>
 
 #include <catch2/catch.hpp>
 
@@ -15,6 +17,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointF>
+#include <QUndoStack>
 
 #include <algorithm>
 #include <memory>
@@ -362,6 +365,67 @@ TEST_CASE("Adding and removing nodes from a group", "[node-group]")
         CHECK(scene.groups().find(groupId) == scene.groups().end());
         CHECK(scene.nodeGraphicsObject(nodeIds.front()) == nullptr);
         CHECK(scene.nodeGraphicsObject(nodeIds.back()) == nullptr);
+    }
+}
+
+TEST_CASE("Delete undo restores grouped nodes without changing group identity",
+          "[node-group][undo]")
+{
+    auto app = applicationSetup();
+    DataFlowGraphModel model(createDummyRegistry());
+    BasicGraphicsScene scene(model);
+    scene.setGroupingEnabled(true);
+    const NodeId first = createNode(model, scene);
+    const NodeId second = createNode(model, scene);
+    const NodeId unrelated = createNode(model, scene);
+    std::vector<NodeGraphicsObject *> members{
+        scene.nodeGraphicsObject(first), scene.nodeGraphicsObject(second)};
+    auto original = scene.createGroup(members, QStringLiteral("Original group"));
+    REQUIRE_FALSE(original.expired());
+    const GroupId groupId = original.lock()->id();
+    original.lock()->groupGraphicsObject().lock(false);
+    scene.clearSelection();
+
+    bool deletesSecond = false;
+    SECTION("One child is selected while its group survives")
+    {
+        scene.nodeGraphicsObject(first)->setSelected(true);
+    }
+    SECTION("All children are selected without selecting the group")
+    {
+        deletesSecond = true;
+        scene.nodeGraphicsObject(first)->setSelected(true);
+        scene.nodeGraphicsObject(second)->setSelected(true);
+    }
+    SECTION("The whole group is selected")
+    {
+        deletesSecond = true;
+        original.lock()->groupGraphicsObject().setSelected(true);
+    }
+
+    scene.undoStack().push(new QtNodes::DeleteCommand(&scene));
+    for (int cycle = 0; cycle < 2; ++cycle) {
+        CHECK_FALSE(model.nodeExists(first));
+        CHECK(model.nodeExists(second) == !deletesSecond);
+        REQUIRE(model.nodeExists(unrelated));
+
+        scene.undoStack().undo();
+        REQUIRE(model.nodeExists(first));
+        REQUIRE(model.nodeExists(second));
+        REQUIRE(scene.groups().size() == 1);
+        REQUIRE(scene.groups().count(groupId) == 1);
+        auto restored = scene.groups().at(groupId);
+        CHECK(restored->name() == QStringLiteral("Original group"));
+        CHECK_FALSE(restored->groupGraphicsObject().locked());
+        CHECK(toNodeIdSet(restored->nodeIDs()) == (std::set<NodeId>{first, second}));
+        CHECK(scene.nodeGraphicsObject(first)->nodeGroup().lock() == restored);
+        CHECK(scene.nodeGraphicsObject(second)->nodeGroup().lock() == restored);
+        CHECK(scene.nodeGraphicsObject(unrelated)->nodeGroup().expired());
+        if (!deletesSecond) {
+            CHECK(restored == original.lock());
+        }
+        restored.reset();
+        scene.undoStack().redo();
     }
 }
 
