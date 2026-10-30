@@ -175,7 +175,9 @@ For ports on all sides, create a custom ``AbstractNodeGeometry``.
 
 **Can I group nodes?**
 
-Node grouping is planned but not yet implemented. Track progress on GitHub.
+Yes. Select nodes and use **Create group from selection** in the scene context
+menu, or call ``BasicGraphicsScene::createGroupFromSelection()``. See
+:ref:`node-groups` for the grouping API.
 
 **Can I have curved connections?**
 

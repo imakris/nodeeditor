@@ -310,13 +310,21 @@ Build graphs in code (useful for testing or loading custom formats):
        }
    }
 
-Node Groups (Future)
---------------------
+.. _node-groups:
 
-.. note::
+Node Groups
+-----------
 
-   Node grouping is planned but not yet implemented. See the
-   `GitHub issues <https://github.com/paceholder/nodeeditor/issues>`_ for status.
+``BasicGraphicsScene`` supports groups of nodes. Use
+``createGroupFromSelection()`` for selected nodes or ``createGroup()`` for an
+explicit node list. The scene context menu offers **Create group from
+selection** and **Add to group...**.
+
+``addNodeToGroup()`` and ``removeNodeFromGroup()`` change membership;
+``groups()`` exposes the scene's groups. ``saveGroupFile()`` and
+``loadGroupFile()`` provide group-file storage. ``setGroupingEnabled(false)``
+removes the groups and disables grouping while leaving their nodes in the
+scene.
 
 .. seealso::
 
